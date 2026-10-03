@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Masuk — finance</title>
+<!--
+  Halaman login BERDIRI SENDIRI — tanpa Tailwind, tanpa app.js.
+
+  Alasannya: `_butuh_login` di src/server.py hanya mengecualikan path di PUBLIK
+  (/login, /login.html, /masuk). `/tailwind.css` dan `/app.js` tetap butuh sesi
+  — terukur: keduanya balas HTTP 302 sebelum login. Jadi halaman ini tidak
+  boleh memuat keduanya, atau tampilannya rusak di keadaan yang justru paling
+  penting: saat Deny baru membukanya.
+
+  Warnanya ditulis manual mengikuti token di web/src.css supaya halaman ini
+  tidak terlihat seperti aplikasi yang berbeda:
+    --color-expense: #d92d20   --color-income: #067647
+    target sentuh 44px (UI-MOBILE.md)
+
+  Dua mode yang ditangani:
+    1. Pemasangan pertama  — belum ada password, minta dua kali (password +
+       konfirmasi). Server langsung membuat sesi setelah dipasang, jadi Deny
+       tidak perlu mengetik ulang.
+    2. Login biasa         — minta sekali.
+  Mode ditentukan dari GET /api/auth (`sudah_ada_password`).
+-->
+<style>
+  :root {
+    --bg: #f9fafb;
+    --card: #ffffff;
+    --teks: #111827;
+    --teks-lembut: #6b7280;
+    --garis: #e5e7eb;
+    --biru: #2563eb;
+    --biru-hover: #1d4ed8;
+    --merah: #d92d20;
+    --merah-bg: #fef3f2;
+    --hijau: #067647;
+    --hijau-bg: #ecfdf3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #030712;
+      --card: #111827;
+      --teks: #f3f4f6;
+      --teks-lembut: #9ca3af;
+      --garis: #1f2937;
+      --merah: #fda29b;
+      --merah-bg: #4e1d18;
+      --hijau: #75e0a7;
+      --hijau-bg: #05412e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--teks);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    min-height: 100vh;
+    /* Mobile-first: kartu di tengah, tapi tidak menempel di tepi layar HP. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px env(safe-area-inset-bottom, 20px);
+  }
+  main { width: 100%; max-width: 380px; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 20px; font-size: 13px; line-height: 1.5; color: var(--teks-lembut); }
+  .kartu {
+    background: var(--card);
+    border: 1px solid var(--garis);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .bidang-sandi { position: relative; margin-bottom: 16px; }
+  input[type="password"], input[type="text"] {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 52px 10px 12px;   /* kanan lega untuk tombol mata */
+    font: inherit;
+    font-size: 16px;          /* 16px = iOS tidak memperbesar layar saat fokus */
+    color: var(--teks);
+    background: var(--bg);
+    border: 1px solid var(--garis);
+    border-radius: 8px;
+  }
+  /* Tombol lihat/sembunyikan password. Ditaruh DI DALAM kotak input supaya
+     tidak menambah tinggi form, tapi tetap 44px (UI-MOBILE.md). */
+  .lihat-pw {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    height: 100%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 0 8px 8px 0;
+    color: var(--teks-lembut);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .lihat-pw:hover:not(:disabled) { background: transparent; color: var(--teks); }
+  .lihat-pw:active:not(:disabled) { transform: none; }
+  input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--biru);
+    outline-offset: 2px;
+  }
+  button {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 16px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--biru);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background-color 150ms, transform 100ms;
+  }
+  button:hover:not(:disabled) { background: var(--biru-hover); }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.55; cursor: default; }
+  .pesan {
+    display: none;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    border-radius: 8px;
+  }
+  .pesan.tampil { display: block; }
+  .pesan.salah { background: var(--merah-bg); color: var(--merah); }
+  .pesan.benar { background: var(--hijau-bg); color: var(--hijau); }
+  .petunjuk {
+    margin: 16px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--garis);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--teks-lembut);
+  }
+  kbd {
+    font: inherit;
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid var(--garis);
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+    button:active:not(:disabled) { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>finance</h1>
+  <p class="sub" id="sub">Memeriksa status…</p>
+
+  <div class="kartu">
+    <p class="pesan" id="pesan" role="alert"></p>
+
+    <form id="form" novalidate>
+      <label for="pw" id="label-pw">Password</label>
+      <div class="bidang-sandi">
+        <input type="password" id="pw" name="pw" autocomplete="current-password"
+               required autofocus>
+        <button type="button" class="lihat-pw" id="lihat-pw"
+                aria-label="Tampilkan password" aria-pressed="false"
+                title="Tampilkan password">👁</button>
+      </div>
+
+      <!-- Konfirmasi hanya muncul saat PEMASANGAN pertama. Disembunyikan
+           dengan `hidden`, bukan `display:none` di CSS, supaya pembaca layar
+           mengabaikannya dengan benar. -->
+      <div id="baris-konfirmasi" hidden>
+        <label for="pw2">Ulangi password</label>
+        <div class="bidang-sandi">
+          <input type="password" id="pw2" name="pw2" autocomplete="new-password">
+          <button type="button" class="lihat-pw" id="lihat-pw2"
+                  aria-label="Tampilkan password ulangan" aria-pressed="false"
+                  title="Tampilkan password ulangan">👁</button>
+        </div>
+      </div>
+
+      <button type="submit" id="tombol">Masuk</button>
+    </form>
+
+    <p class="petunjuk" id="petunjuk">
+      Sesi hilang kalau servernya dimatikan — Deny perlu masuk lagi setelah itu.
+    </p>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var form = document.getElementById('form');
+  var pw = document.getElementById('pw');
+  var pw2 = document.getElementById('pw2');
+  var barisKonfirmasi = document.getElementById('baris-konfirmasi');
+  var tombol = document.getElementById('tombol');
+  var pesan = document.getElementById('pesan');
+  var sub = document.getElementById('sub');
+  var labelPw = document.getElementById('label-pw');
+  var petunjuk = document.getElementById('petunjuk');
+
+  var mode = null;      /* 'pasang' | 'masuk' */
+  var minPw = 6;        /* ditimpa dari GET /api/auth (panjang_min_password) */
+
+  /* ── Tombol lihat/sembunyikan password ────────────────────────────────
+     Berguna terutama di HP: mengetik password panjang di papan sentuh mudah
+     salah, dan tanpa ini satu-salah-ketik berarti mengetik ulang semuanya.
+     `type` ditukar antara password/text; tidak ada penyimpanan nilai di
+     tempat lain — jadi tidak ada salinan password di DOM. */
+  function pasangTombolLihat(btn, input) {
+    btn.addEventListener('click', function () {
+      var tampil = input.type === 'text';
+      input.type = tampil ? 'password' : 'text';
+      btn.textContent = tampil ? '👁' : '🙈';
+      btn.setAttribute('aria-pressed', String(!tampil));
+      btn.setAttribute('aria-label', tampil ? 'Tampilkan password' : 'Sembunyikan password');
+      btn.title = tampil ? 'Tampilkan password' : 'Sembunyikan password';
+      input.focus();
+    });
+  }
+  pasangTombolLihat(document.getElementById('lihat-pw'), pw);
+  pasangTombolLihat(document.getElementById('lihat-pw2'), pw2);
+
+  function tampilkanPesan(teks, jenis) {
+    pesan.textContent = teks;
+    pesan.className = 'pesan tampil ' + (jenis === 'benar' ? 'benar' : 'salah');
+  }
+  function bersihkanPesan() {
+    pesan.className = 'pesan';
+    pesan.textContent = '';
+  }
+
+  /* ── Tentukan mode dari server ─────────────────────────────────────────
+     Belum ada password -> pemasangan pertama. Sudah ada -> login biasa.
+     Kalau statusnya tidak bisa dibaca, JANGAN menebak: tampilkan pesan dan
+     tetap izinkan mencoba login biasa (jangan memblokir Deny karena satu
+     request gagal). */
+  async function muatStatus() {
+    /* Sesi bisa mati saat panel sedang dipakai (server restart, atau diam
+       12 jam). app.js menulis penanda di sessionStorage sebelum mengalihkan
+       ke sini. Ditampilkan SEKALI saja — monica khawatir pesan permanen akan
+       terbaca seperti kerusakan; yang ini muncul cuma kalau memang baru
+       terlempar keluar, dan langsung dihapus setelah dibaca. */
+    var sebab = null;
+    try {
+      sebab = sessionStorage.getItem('sesi_mati');
+      if (sebab) sessionStorage.removeItem('sesi_mati');
+    } catch (e) { /* mode privat: tidak apa-apa */ }
+    if (sebab) tampilkanPesan('Sesi berakhir — masuk lagi untuk melanjutkan.');
+
+    try {
+      var r = await fetch('/api/auth', { cache: 'no-store' });
+      var d = await r.json();
+      /* Batas panjang diambil dari SERVER, bukan ditulis "6" di sini.
+         Alasannya sama seperti angka keuangan: kalau monica mengubahnya,
+         halaman ini ikut sendiri — tidak ada dua sumber untuk satu aturan
+         yang bisa saling bertentangan tanpa ketahuan. */
+      if (d && typeof d.panjang_min_password === 'number') minPw = d.panjang_min_password;
+      if (d.sudah_ada_password) {
+        mode = 'masuk';
+        sub.textContent = 'Masukkan password untuk membuka panel.';
+        labelPw.textContent = 'Password';
+        tombol.textContent = 'Masuk';
+        pw.setAttribute('autocomplete', 'current-password');
+      } else {
+        mode = 'pasang';
+        sub.textContent = 'Belum ada password. Tentukan satu untuk mengunci panel ini.';
+        barisKonfirmasi.hidden = false;
+        labelPw.textContent = 'Password baru';
+        tombol.textContent = 'Pasang password & masuk';
+        pw.setAttribute('autocomplete', 'new-password');
+        pw.minLength = minPw;
+        petunjuk.textContent = 'Minimal ' + minPw + ' karakter. Password ini '
+          + 'hanya mengunci panel di komputer ini — tidak dikirim ke mana pun.';
+      }
+    } catch (e) {
+      mode = 'masuk';
+      sub.textContent = 'Tidak bisa membaca status login. Coba masukkan password.';
+    }
+  }
+
+  form.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    bersihkanPesan();
+
+    var a = pw.value;
+    var b = pw2.value;
+
+    if (!a) {
+      tampilkanPesan('Password tidak boleh kosong.');
+      pw.focus();
+      return;
+    }
+    if (mode === 'pasang') {
+      if (a.length < minPw) {
+        tampilkanPesan('Password minimal ' + minPw + ' karakter.');
+        pw.focus();
+        return;
+      }
+      if (a !== b) {
+        tampilkanPesan('Dua password yang dimasukkan berbeda.');
+        pw2.focus();
+        return;
+      }
+    }
+
+    tombol.disabled = true;
+    tombol.textContent = mode === 'pasang' ? 'Memasang…' : 'Masuk…';
+
+    var body = { password: a };
+    if (mode === 'pasang') body.konfirmasi = b;
+
+    try {
+      var r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      var d = null;
+      try { d = await r.json(); } catch (e) { d = null; }
+
+      /* Cookie sesi sudah dipasang server saat balasan ini. Jadi cukup
+         mengalihkan ke panel — tidak perlu apa-apa lagi. */
+      if (d && d.masuk) {
+        tampilkanPesan(mode === 'pasang' ? 'Password dipasang. Membuka panel…'
+                                         : 'Berhasil masuk. Membuka panel…', 'benar');
+        location.replace('/');
+        return;
+      }
+
+      /* Gagal: pakai `message` dari server apa adanya — dia yang tahu
+         alasannya, dan menerjemahkan ulang di sini bisa menggeser makna. */
+      var teks = (d && (d.message || d.error)) || 'Tidak bisa masuk. Coba lagi.';
+      if (!d) teks = 'Server membalas bukan JSON (HTTP ' + r.status + ').';
+      tampilkanPesan(teks);
+
+      /* Field password TIDAK dikosongkan (aturan monica): Deny biasanya cuma
+         salah ketik, dan menghapus isinya berarti dia mengetik ulang
+         semuanya. Kursor diletakkan di akhir supaya bisa langsung
+         membetulkan, bukan menimpa dari awal. */
+      pw.focus();
+      var n = pw.value.length;
+      try { pw.setSelectionRange(n, n); } catch (e) { /* type=text tidak selalu mendukung */ }
+    } catch (e) {
+      tampilkanPesan('Server tidak menjawab. Pastikan servernya masih jalan.');
+    } finally {
+      tombol.disabled = false;
+      tombol.textContent = mode === 'pasang' ? 'Pasang password & masuk' : 'Masuk';
+    }
+  });
+
+  muatStatus();
+})();
+</script>
+</body>
+</html>

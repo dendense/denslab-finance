@@ -1,0 +1,16 @@
+{
+  "name": "web",
+  "version": "1.0.0",
+  "description": "Panel finance — Tailwind sebagai sumber gaya. tailwind.css adalah hasil build; jalankan npm run css setelah mengubah class.",
+  "main": "app.js",
+  "scripts": {
+    "css": "tailwindcss -i src.css -o tailwind.css --minify",
+    "css:watch": "tailwindcss -i src.css -o tailwind.css --watch"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

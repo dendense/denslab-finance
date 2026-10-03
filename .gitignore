@@ -1,0 +1,78 @@
+# finance — berkas yang TIDAK boleh ikut git
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA PRIBADI
+#
+# Sejak 3 Okt 2026 data hidup DI LUAR repo (`../finance-pribadi/`), jadi
+# daftar di bawah ini bukan pengaman utama — pemisahan fisiknya yang mengamankan.
+# Daftar ini tetap ada sebagai jaring kedua: kalau seseorang menaruh data
+# kembali ke dalam repo, `git add .` tidak akan menyentuhnya.
+#
+# Kenapa tidak cukup mengandalkan .gitignore saja: ia hanya mencegah `git add .`
+# menambahkan berkas. Ia TIDAK mencegah `git add -f`, alat yang mengabaikan
+# .gitignore, atau salah ketik. Dan begitu data keuangan masuk satu commit,
+# menghapusnya tidak cukup — git menyimpan riwayat, dan berkasnya tetap bisa
+# di-checkout siapa pun yang meng-clone.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Database keuangan — isi seluruh aplikasi
+data/
+finance-pribadi/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.db.bak-*
+*.db.cadangan-*
+
+# Kredensial panel: berisi hash password. Walaupun bukan teks polos, hash-nya
+# tetap tidak boleh keluar dari Mac ini.
+kredensial.json
+
+# Log hapus (menyalin isi baris yang dihapus)
+terhapus.log
+
+# Rekening koran asli: berisi nomor rekening dan seluruh riwayat transaksi
+statements/
+*.pdf
+
+# Berkas rahasia / konfigurasi lokal
+.env
+.env.*
+!.env.example
+secret*
+config.lokal.*
+*.key
+*.pem
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HASIL BUILD & DEPENDENSI — bisa dibangun ulang
+#
+# PENTING: `web/tailwind.css` TIDAK diabaikan, walaupun ia hasil build.
+# Kalau diabaikan, orang yang meng-clone mendapat panel tanpa gaya sama sekali
+# kecuali ia memasang Node.js lebih dulu. Panel harus bisa dibuka langsung
+# setelah clone — itu yang membuat orang mau mencobanya.
+# ─────────────────────────────────────────────────────────────────────────────
+node_modules/
+.npm-cache/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SISTEM & EDITOR
+# ─────────────────────────────────────────────────────────────────────────────
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

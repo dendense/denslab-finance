@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>finance — panel</title>
+
+<!-- WAJIB paling atas, SEBELUM <link> stylesheet. Kalau ditaruh sesudahnya,
+     CSS sudah diterapkan lebih dulu dan mode gelap berkedip putih sesaat.
+     Baca tema tersimpan sebelum halaman digambar.
+     Urutan keputusan: pilihan tersimpan > pengaturan sistem > terang. -->
+<script>
+(function () {
+  var pilih = 'sistem';
+  try { pilih = localStorage.getItem('tema') || 'sistem'; } catch (e) {}
+  var gelap = pilih === 'gelap' || (pilih === 'sistem'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (gelap) document.documentElement.classList.add('gelap');
+  document.documentElement.dataset.tema = pilih;
+})();
+</script>
+
+<!-- tailwind.css dihasilkan dari src.css. Ubah class = jalankan ulang:
+     npm run css        (sekali)
+     npm run css:watch  (sambil mengerjakan) -->
+<link rel="stylesheet" href="/tailwind.css">
+</head>
+<body>
+
+<!-- ══ NAVBAR ATAS ══════════════════════════════════════════════════════════
+     Satu baris: judul | navigasi (tengah) | pemilih bulan.
+     Di layar sempit judul dan label navtab hilang; ikon + tombol bulan tetap.
+     Navigasi ada di ATAS sesuai permintaan Deny (dipakai dari jendela lebar).
+     Catatan: UI-MOBILE.md meminta aksi utama di separuh bawah supaya
+     terjangkau ibu jari — navbar atas adalah kebalikannya. -->
+<header id="appbar"
+        class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur
+               dark:border-gray-800 dark:bg-gray-900/95"
+        style="padding-top: env(safe-area-inset-top, 0px)">
+  <nav class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5"
+       aria-label="Navigasi utama">
+    <h1 class="shrink-0 text-base font-bold tracking-tight max-[640px]:hidden">finance</h1>
+
+    <div class="mx-auto flex items-stretch gap-0.5 max-[640px]:flex-1 max-[640px]:justify-center"
+         role="tablist">
+      <button class="navtab" type="button" data-tab="home" aria-current="page" role="tab">
+        <span class="text-[17px] leading-none" aria-hidden="true">◧</span>
+        <span class="max-[640px]:hidden">Beranda</span>
+      </button>
+      <button class="navtab" type="button" data-tab="catat" role="tab">
+        <span class="text-[17px] leading-none" aria-hidden="true">＋</span>
+        <span class="max-[640px]:hidden">Catat</span>
+      </button>
+      <button class="navtab" type="button" data-tab="daftar" role="tab">
+        <span class="text-[17px] leading-none" aria-hidden="true">≡</span>
+        <span class="max-[640px]:hidden">Daftar</span>
+      </button>
+      <button class="navtab" type="button" data-tab="akun" role="tab">
+        <span class="text-[17px] leading-none" aria-hidden="true">◈</span>
+        <span class="max-[640px]:hidden">Akun</span>
+      </button>
+      <button class="navtab" type="button" data-tab="analisa" role="tab">
+        <span class="text-[17px] leading-none" aria-hidden="true">◔</span>
+        <span class="max-[640px]:hidden">Analisa</span>
+      </button>
+    </div>
+
+    <div class="flex shrink-0 items-center gap-1">
+      <!-- Tombol sensor nominal. Ditaruh bersebelahan dengan toggle tema.
+           TIDAK disimpan setelah reload: setiap kali panel dibuka, nominal
+           terlihat lagi — lebih aman daripada lupa mematikan sensor. -->
+      <button id="btn-sensor" type="button"
+              aria-pressed="false"
+              aria-label="Sembunyikan nominal uang"
+              title="Sembunyikan nominal (titik-titik). Tidak diingat setelah halaman dimuat ulang."
+              class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-lg
+                     text-gray-600 hover:bg-gray-100 active:scale-[0.97]
+                     aria-pressed:bg-amber-100 aria-pressed:text-amber-700
+                     dark:text-gray-300 dark:hover:bg-gray-800
+                     dark:aria-pressed:bg-amber-900/40 dark:aria-pressed:text-amber-300">
+        <span id="sensor-ikon" aria-hidden="true">👁</span>
+      </button>
+      <span id="sensor-status" class="sr-only" aria-live="polite"></span>
+
+      <!-- Toggle tema -->
+      <button id="btn-tema" type="button"
+              aria-label="Ganti tema tampilan"
+              title="Ganti tema: Terang, Gelap, atau Ikut sistem"
+              class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-lg
+                     text-gray-600 hover:bg-gray-100 active:scale-[0.97]
+                     dark:text-gray-300 dark:hover:bg-gray-800">
+        <span id="tema-ikon" aria-hidden="true">◐</span>
+      </button>
+      <span id="tema-status" class="sr-only" aria-live="polite"></span>
+
+      <span class="mx-1 hidden h-6 w-px bg-gray-200 dark:bg-gray-700 min-[640px]:block"></span>
+
+      <!-- Pemilih bulan DIKELUARKAN dari wadah kontrol supaya bisa turun ke
+           baris kedua navbar di layar sempit. Sebelumnya ia bersarang di
+           dalam wadah kontrol 288px; `order-last` + `w-full` di sana tidak
+           memindahkannya ke baris navbar, hanya di dalam wadahnya sendiri —
+           akibatnya wadah itu tetap meluber 30-52px keluar layar di 520-620px. -->
+    </div>
+
+    <div class="navbulan flex shrink-0 items-center gap-1">
+      <button id="btn-prev-month" type="button" aria-label="Bulan sebelumnya"
+              class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-lg
+                     text-gray-600 hover:bg-gray-100 active:scale-[0.97]
+                     dark:text-gray-300 dark:hover:bg-gray-800">‹</button>
+      <span id="month-label" aria-live="polite"
+            class="min-w-24 text-center text-[13px] font-semibold text-gray-600
+                   dark:text-gray-300">—</span>
+      <button id="btn-next-month" type="button" aria-label="Bulan berikutnya"
+              class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-lg
+                     text-gray-600 hover:bg-gray-100 active:scale-[0.97]
+                     dark:text-gray-300 dark:hover:bg-gray-800">›</button>
+    </div>
+  </nav>
+</header>
+
+<main class="mx-auto max-w-6xl px-4 pb-10">
+<div id="toast-host"></div>
+
+  <!-- ══ BERANDA ══════════════════════════════════════════════════════════ -->
+  <section id="view-home" class="view masuk" aria-labelledby="h-home">
+    <h2 id="h-home" class="sr-only">Panel analisa</h2>
+
+    <!-- Kolom kiri (analisa) + kolom kanan (transaksi) saat jendela lebar. -->
+    <div class="flex flex-col gap-4 py-4 lg:flex-row lg:items-start lg:gap-6">
+
+      <div class="flex min-w-0 flex-1 flex-col gap-4">
+
+        <!-- 1. Total kekayaan — angka paling besar, pertama dicari -->
+        <div class="kartu">
+          <p class="eyebrow">Total kekayaan</p>
+          <p class="angka-besar mt-1" id="hero-value">—</p>
+          <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-gray-200 pt-3
+                      text-[13px] text-gray-500 dark:border-gray-800 dark:text-gray-400"
+               id="hero-breakdown" hidden></div>
+        </div>
+
+        <!-- 2. Pemasukan & pengeluaran bulan berjalan -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="kartu">
+            <p class="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500
+                      dark:text-gray-400">
+              <span class="inline-block h-2 w-2 rounded-full bg-(--color-income)"></span>
+              Pemasukan
+            </p>
+            <p class="angka-stat mt-2 text-(--color-income)" id="stat-in">—</p>
+            <p class="mt-1 text-xs leading-snug text-gray-400 dark:text-gray-500"
+               id="stat-in-sub"></p>
+          </div>
+          <div class="kartu">
+            <p class="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500
+                      dark:text-gray-400">
+              <span class="inline-block h-2 w-2 rounded-full bg-(--color-expense)"></span>
+              Pengeluaran
+            </p>
+            <p class="angka-stat mt-2 text-(--color-expense)" id="stat-expense">—</p>
+            <p class="mt-1 text-xs leading-snug text-gray-400 dark:text-gray-500"
+               id="stat-expense-sub"></p>
+          </div>
+        </div>
+
+        <!-- 3. Selisih -->
+        <div class="kartu flex flex-wrap items-baseline justify-between gap-3"
+             id="delta-card">
+          <div>
+            <p class="text-[13px] font-semibold text-gray-500 dark:text-gray-400">
+              Perubahan kekayaan</p>
+            <p class="angka-selisih mt-0.5" id="delta-value">—</p>
+          </div>
+          <p class="max-w-[46%] text-xs leading-snug text-gray-400 dark:text-gray-500"
+             id="delta-sub"></p>
+        </div>
+
+        <!-- 4. Tidak ada data bulan ini: kalimat, bukan angka 0 -->
+        <div class="rounded-xl border border-dashed border-gray-300 px-5 py-6 text-center
+                    dark:border-gray-700" id="home-empty" hidden>
+          <p class="text-base font-semibold">Belum ada data bulan ini</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" id="home-empty-body"></p>
+        </div>
+
+        <!-- Panel sisa bulan lalu — DI ATAS grafik tren, sesuai permintaan
+             Deny. Isinya saldo di AKHIR bulan sebelumnya (net_worth_akhir),
+             dari /api/analysis. Diisi renderSisaBulanLalu().
+
+             Placeholder muncul kalau bulan lalu belum ada datanya ATAU belum
+             selesai — bukan angka nol (permintaan Deny). -->
+        <div id="lalu-blok" class="kartu">
+          <p class="eyebrow">Sisa bulan lalu</p>
+          <div id="lalu-host"></div>
+        </div>
+
+        <!-- 5. Grafik tren 6 bulan -->
+        <div class="kartu" id="chart-card">
+          <p class="eyebrow">Tren 6 bulan</p>
+          <p class="mt-1 mb-3 text-xs leading-snug text-gray-500 dark:text-gray-400"
+             id="chart-note"></p>
+          <div id="chart-host" role="img" aria-label="Grafik tren enam bulan"></div>
+          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500
+                      dark:text-gray-400" id="chart-legend"></div>
+        </div>
+      </div>
+
+      <!-- Kolom kanan: 336 px di jendela lebar. Sebelumnya 320 px dan tanpa
+           padding samping, sehingga catatan panjang ("Pembayaran VirtualAccount ke
+           Finnet…") pecah 3 baris dan teks menempel ke tepi kartu. -->
+      <div class="w-full shrink-0 lg:w-[336px]">
+        <!-- Target tabungan DULU, transaksi terakhir di bawahnya.
+             Urutan ini diminta Deny: progres tabungan lebih penting dilihat
+             lebih awal daripada daftar transaksi, karena ia menjawab
+             "bagaimana keadaanku" sementara daftar menjawab "apa yang baru
+             terjadi". Menggantikan panel "saldo akun tabungan" yang dulu di
+             sini — saldo akun sudah ada di layar Akun, dan dua arti
+             "tabungan" (saldo vs progres) di satu layar membuat orang
+             bertanya mana yang benar. Monica setuju (pilihan 3).
+             Isinya diisi renderTargetTabungan() dari /api/savings. -->
+        <div id="target-blok">
+          <p class="eyebrow">Target tabungan</p>
+          <div class="kartu mt-3" id="target-host"></div>
+        </div>
+
+        <p class="eyebrow mt-5">Transaksi terakhir</p>
+        <div class="kartu kartu-rapat mt-3" id="recent-host"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ CATAT ════════════════════════════════════════════════════════════ -->
+  <section id="view-catat" class="view masuk" aria-labelledby="h-catat" hidden>
+    <h2 id="h-catat" class="sr-only">Catat transaksi</h2>
+    <div class="mx-auto flex max-w-3xl flex-col">
+      <div class="flex flex-col gap-4 py-4" id="chatlog"
+           aria-live="polite" aria-relevant="additions"></div>
+
+      <div class="sticky bottom-0 border-t border-gray-200 bg-gray-50 py-3
+                  dark:border-gray-800 dark:bg-gray-950">
+        <form class="flex items-end gap-2" id="composer-form">
+          <label class="sr-only" for="chat-input">Kalimat transaksi</label>
+          <textarea id="chat-input" rows="1" enterkeyhint="send"
+            placeholder="cth: makan malam 45000 sama parkir 5rb"
+            autocomplete="off" autocapitalize="sentences"
+            class="min-h-tap max-h-33 flex-1 resize-none rounded-lg border
+                   border-gray-300 bg-white px-3 py-3 text-base
+                   dark:border-gray-700 dark:bg-gray-900"></textarea>
+          <button class="tombol tombol-utama w-11 shrink-0 px-0" id="btn-send"
+                  type="submit" aria-label="Uraikan">
+            <span id="btn-send-icon">↑</span>
+          </button>
+        </form>
+        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+          Kalimat diuraikan jadi draft dulu — belum tersimpan sampai kamu tekan Simpan.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ DAFTAR ═══════════════════════════════════════════════════════════ -->
+  <section id="view-daftar" class="view masuk" aria-labelledby="h-daftar" hidden>
+    <h2 id="h-daftar" class="sr-only">Daftar transaksi</h2>
+    <div class="mx-auto max-w-3xl py-4">
+      <p class="eyebrow" id="daftar-count"></p>
+      <div class="mt-3" id="daftar-host"></div>
+    </div>
+  </section>
+
+  <!-- ══ AKUN ═════════════════════════════════════════════════════════════
+       Jarak diatur satu tempat lewat `gap-6` di wadahnya, bukan `mt-*` di tiap
+       blok — supaya jarak antar blok konsisten dan tidak terasa mepet. -->
+  <section id="view-akun" class="view masuk" aria-labelledby="h-akun" hidden>
+    <h2 id="h-akun" class="sr-only">Akun dan saldo</h2>
+    <div class="mx-auto flex max-w-3xl flex-col gap-6 py-6">
+      <div class="kartu">
+        <p class="eyebrow">Total kekayaan</p>
+        <p class="angka-besar mt-1" id="akun-total">—</p>
+        <div class="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-gray-200 pt-4
+                    text-[13px] text-gray-500 dark:border-gray-800 dark:text-gray-400"
+             id="akun-breakdown" hidden></div>
+      </div>
+      <div id="akun-host"></div>
+      <p class="text-xs leading-relaxed text-gray-400 dark:text-gray-500">
+        Saldo dihitung dari transaksi yang tercatat. Belum ada saldo awal —
+        kalau angkanya tidak cocok dengan mutasi bank, itu temuan, bukan pembulatan.
+      </p>
+
+      <!-- Tombol keluar. Ditaruh di layar Akun paling bawah, bukan di navbar:
+           keluar tidak sengaja saat sedang mencatat transaksi itu menjengkelkan,
+           dan ini tempat yang butuh sengaja membuka layar Akun dulu.
+           Tanpa konfirmasi — keluar tidak merusak apa pun (monica §5). -->
+      <div class="mt-2 border-t border-gray-200 pt-5 dark:border-gray-800">
+        <button id="btn-keluar" type="button" class="tombol tombol-hantu">
+          Keluar dari panel
+        </button>
+        <p class="mt-2 text-xs leading-relaxed text-gray-400 dark:text-gray-500">
+          Panel akan terkunci dan perlu password lagi. Datamu tidak terpengaruh.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ANALISA BULANAN ══════════════════════════════════════════════════
+       Analisa untuk bulan yang SUDAH SELESAI. Sumber: GET/POST/DELETE
+       /api/analysis, daftar bulan dari /api/months.
+
+       Empat aturan monica yang menentukan bentuk layar ini (lihat
+       docs/selesai/monica-ke-yuki-2026-10-03-analisa-bulanan.md §2–§3):
+         1. "Bisa ditabung" pakai `sisa_bebas`, BUKAN `sisa_kas`.
+         2. `kelengkapan.peringatan` ditampilkan DI ATAS angka sisa.
+         3. `potensi_hemat: null` tampil tanpa angka; `asumsi` WAJIB tampil.
+         4. Tombol "Buat analisa" mati kalau `boleh_dianalisa: false`.
+       Semua isi di sini digambar oleh renderAnalisa() — tidak ada angka
+       yang ditulis di HTML. -->
+  <section id="view-analisa" class="view masuk" aria-labelledby="h-analisa" hidden>
+    <h2 id="h-analisa" class="sr-only">Analisa bulanan</h2>
+    <div class="mx-auto flex max-w-3xl flex-col gap-6 py-6">
+
+      <!-- Pemilih bulan. Isinya dari /api/months — hanya bulan yang punya
+           transaksi, karena bulan kosong tidak ada yang bisa ditampilkan. -->
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="analisa-bulan" class="text-xs font-semibold uppercase tracking-wider
+               text-gray-500 dark:text-gray-400">Bulan</label>
+        <select id="analisa-bulan"
+                class="min-h-tap rounded-lg border border-gray-300 bg-white px-3 py-2
+                       text-[15px] dark:border-gray-700 dark:bg-gray-900"></select>
+        <span id="analisa-penanda" class="text-xs text-gray-500 dark:text-gray-400"></span>
+      </div>
+
+      <!-- Tempat semua kartu analisa. Diisi renderAnalisa(). -->
+      <div id="analisa-host" class="flex flex-col gap-4"></div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer class="border-t border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+  <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5
+              text-xs text-gray-500 dark:text-gray-400
+              sm:flex-row sm:items-center sm:justify-between">
+    <p class="m-0">
+      &copy; <span id="tahun">2026</span> monic finance by
+      <!-- Tautan diberi padding vertikal supaya area sentuhnya >= 44px
+           (UI-MOBILE.md). Tanpa itu tingginya cuma 15px — terlalu kecil
+           untuk jari. Padding negatif di wadahnya menjaga jarak tetap rapat. -->
+      <a href="https://denslab.vercel.app" target="_blank" rel="noopener noreferrer"
+         class="inline-flex min-h-11 items-center px-1 font-semibold text-blue-600
+                hover:underline dark:text-blue-400">denslab</a>
+    </p>
+    <p class="m-0">
+      Created by
+      <a href="https://hermes-agent.nousresearch.com" target="_blank" rel="noopener noreferrer"
+         class="inline-flex min-h-11 items-center px-1 font-semibold text-blue-600
+                hover:underline dark:text-blue-400">Hermes Agent</a>
+      &middot;
+      <a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer"
+         class="inline-flex min-h-11 items-center px-1 font-semibold text-blue-600
+                hover:underline dark:text-blue-400">Tailwind CSS</a>
+    </p>
+  </div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

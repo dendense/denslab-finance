@@ -1,0 +1,387 @@
+/* finance — sumber Tailwind.
+ *
+ * Alur: berkas ini + index.html + app.js dipindai Tailwind, hasilnya
+ * web/tailwind.css. Ubah class = jalankan ulang:
+ *     npm run css          (sekali)
+ *     npm run css:watch    (sambil mengerjakan)
+ *
+ * Yang ada di sini HANYA yang tidak bisa diwakili class Tailwind:
+ * warna sifat transaksi (wajib per CONTRACT.md), dan sedikit komponen yang
+ * diulang di app.js supaya tidak menulis 20 class di dalam string JS.
+ */
+
+@import "tailwindcss";
+
+/* Varian dark: dibaca dari class di <html>, bukan dari prefers-color-scheme.
+   Alasannya: panel perlu menyediakan pilihan manual (Terang/Gelap/Ikut sistem)
+   yang tersimpan di browser. app.js yang memutuskan dan menulis class-nya,
+   termasuk saat pilihan "Ikut sistem" sedang aktif. */
+@custom-variant dark (&:where(.gelap, .gelap *));
+
+/* Pindai dua berkas ini untuk mencari class yang dipakai. */
+@source "./index.html";
+@source "./app.js";
+
+@theme {
+  /* Warna sifat transaksi — CONTRACT.md: expense merah, income hijau,
+     receivable biru, debt_payment oranye, transfer abu netral.
+     Dua nilai per sifat: teks dan latar lembut. */
+  --color-expense: #d92d20;
+  --color-expense-bg: #fef3f2;
+  --color-income: #067647;
+  --color-income-bg: #ecfdf3;
+  --color-receivable: #175cd3;
+  --color-receivable-bg: #eff8ff;
+  --color-debt: #b54708;
+  --color-debt-bg: #fffaeb;
+  --color-transfer: #475467;
+  --color-transfer-bg: #f2f4f7;
+
+  /* Target sentuh minimum 44px (UI-MOBILE.md). Dipakai lewat `min-h-tap`. */
+  --spacing-tap: 44px;
+}
+
+/* Nilai sifat transaksi untuk mode gelap. Dipasang lewat class `.gelap` di
+   <html>, bukan lewat prefers-color-scheme — supaya pilihan manual menang
+   atas pengaturan sistem. app.js yang menulis class itu. */
+.gelap {
+  --color-expense: #ff9c93;
+  --color-expense-bg: #3a1512;
+  --color-income: #7ee2b0;
+  --color-income-bg: #0d2b1d;
+  --color-receivable: #9dc4ff;
+  --color-receivable-bg: #10243f;
+  --color-debt: #ffc38a;
+  --color-debt-bg: #33200a;
+  --color-transfer: #b9c2cd;
+  --color-transfer-bg: #232a33;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Gelap ditulis lewat class, sama seperti komponen — bukan media query.
+     Ini membuat pilihan manual Deny menang walaupun macOS-nya mode terang. */
+  .gelap body { @apply bg-gray-950 text-gray-100; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-blue-600; }
+}
+
+@layer components {
+  /* ── Kartu & permukaan ─────────────────────────────────────────────── */
+  .kartu {
+    @apply rounded-xl border border-gray-200 bg-white p-5
+           dark:border-gray-800 dark:bg-gray-900;
+  }
+  .kartu-rapat { @apply p-0 overflow-hidden; }
+
+  /* ── Angka ─────────────────────────────────────────────────────────── */
+  .angka { @apply tabular-nums; }
+  .angka-besar {
+    @apply tabular-nums font-bold tracking-tight leading-none
+           text-[clamp(28px,9vw,34px)];
+  }
+  .angka-stat { @apply tabular-nums text-xl font-bold tracking-tight; }
+  .angka-selisih { @apply tabular-nums text-2xl font-bold tracking-tight; }
+  .angka-draft { @apply tabular-nums text-[22px] font-semibold; }
+  .angka-baris { @apply tabular-nums font-semibold text-right whitespace-nowrap; }
+
+  /* ── Label kecil huruf besar ───────────────────────────────────────── */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-wider
+           text-gray-500 dark:text-gray-400;
+  }
+
+  /* ── Tombol & chip: target sentuh 44px ─────────────────────────────── */
+  .tombol {
+    @apply inline-flex items-center justify-center gap-2 min-h-tap px-5
+           rounded-lg text-base font-semibold border border-transparent
+           cursor-pointer select-none
+           transition-[transform,background-color,opacity] duration-150
+           active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100;
+  }
+  .tombol-utama { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  .tombol-hantu {
+    @apply bg-white text-gray-900 border-gray-300 hover:bg-gray-50
+           dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 dark:hover:bg-gray-800;
+  }
+  .tombol-kecil { @apply px-4 text-sm; }
+
+  /* Tombol berikon: persegi 44px, tanpa padding samping.
+     Lebar ditulis eksplisit 44px, BUKAN `min-w-tap` atau `min-w-11`:
+     Tailwind v4 di proyek ini menghasilkan `min-h-*` dari token spacing
+     (--spacing-tap) tapi TIDAK menghasilkan `min-w-tap`, dan `min-w-11`
+     juga tidak ada di build. Memakai nama yang tidak ada = tombolnya jadi
+     22px lebar tanpa peringatan apa pun. */
+  .tombol-ikon {
+    @apply px-0;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Di layar sempit, dua tombol ikon di samping teks memakan 88px dari baris
+     356px — nama transaksi cuma dapat 99px dan catatan panjang membungkus
+     jadi 8-9 baris (tinggi baris 219px). Karena itu di bawah 560px tombolnya
+     dipindah ke barisnya sendiri di bawah, sehingga nama dapat lebar penuh.
+     Di layar lebar tetap di samping: ruangnya cukup dan barisnya lebih rapat. */
+  .baris-tombol {
+    @apply flex shrink-0 items-center gap-1;
+  }
+  @media (width < 640px) {
+    .baris {
+      flex-wrap: wrap;
+    }
+    .baris .baris-tombol {
+      @apply order-last w-full justify-end pt-1;
+    }
+  }
+  /* Hapus: warna bahaya, tapi hanya pada hover/focus supaya 18 baris tidak
+     dipenuhi merah. Ikonnya yang membawa makna; warnanya hanya penegas. */
+  .tombol-bahaya {
+    @apply text-gray-600 hover:bg-(--color-expense-bg) hover:text-(--color-expense)
+           hover:border-(--color-expense)
+           dark:text-gray-300;
+  }
+
+  /* Navbar di layar sempit: pemilih bulan turun ke baris kedua.
+     Terukur di 390px sebelum ini: navbar butuh 494px untuk 10 tombol
+     (4 tab + sensor + tema + 2 bulan + label 96px), halaman meluber 104px
+     dan bisa digeser ke samping. Judul "finance" sudah disembunyikan di
+     ≤560px, tapi itu saja tidak cukup — pemilih bulan yang paling lebar. */
+  .navbulan { @apply flex shrink-0 items-center gap-1; }
+  @media (width < 640px) {
+    #appbar nav {
+      flex-wrap: wrap;
+      row-gap: 2px;
+    }
+    .navbulan {
+      @apply order-last w-full justify-center;
+    }
+  }
+
+  .chip {
+    @apply inline-flex items-center justify-center min-h-tap px-4 rounded-full
+           text-[15px] font-medium cursor-pointer select-none whitespace-nowrap
+           transition-[transform,background-color,border-color,color] duration-150
+           active:scale-[0.97]
+           aria-pressed:bg-blue-600 aria-pressed:border-blue-600 aria-pressed:text-white;
+    /* ── Chip TIDAK terpilih: latar transparan + garis tepi ──────────────
+       Sebelumnya `bg-white`, dan itu salah di dua tema:
+         mode terang : putih di halaman putih -> chip-nya tak punya bentuk
+                       sama sekali, cuma teks yang mengambang
+         mode gelap  : putih penuh adalah titik TERANG di layar gelap
+                       (kontras 17.75:1 terhadap latar) sehingga chip yang
+                       TIDAK dipilih justru lebih menarik mata daripada yang
+                       dipilih (biru, 5.25:1). Terbalik dari maksudnya.
+
+       Sekarang transparan: yang membedakan terpilih vs tidak terpilih jadi
+       WARNA (biru pekat vs tanpa latar), bukan terang-gelap.
+
+       Var bos ditulis lewat @apply `dark:*`, BUKAN lewat blok `.gelap .chip`
+       terpisah: `@custom-variant dark (&:where(.gelap, .gelap *))` di atas
+       membuat Tailwind menambahkan scope `.gelap` sendiri. Menulisnya manual
+       TIDAK menghasilkan scope itu — terukur, `.gelap .chip` di dalam
+       @layer components keluar di build sebagai `.chip` biasa, sehingga warna
+       gelapnya bocor ke mode terang. */
+    @apply border border-gray-300 bg-transparent text-gray-700
+           dark:border-gray-500 dark:text-gray-200;
+  }
+  .chip-flow { @apply px-3 text-sm; }
+
+  /* ── Lencana sifat transaksi ───────────────────────────────────────── */
+  .lencana {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px]
+           font-semibold whitespace-nowrap
+           bg-(--color-transfer-bg) text-(--color-transfer);
+  }
+  .lencana-expense    { @apply bg-(--color-expense-bg)    text-(--color-expense); }
+  .lencana-income     { @apply bg-(--color-income-bg)     text-(--color-income); }
+  .lencana-receivable { @apply bg-(--color-receivable-bg) text-(--color-receivable); }
+  .lencana-debt_payment { @apply bg-(--color-debt-bg)     text-(--color-debt); }
+  .lencana-transfer   { @apply bg-(--color-transfer-bg)   text-(--color-transfer); }
+
+  /* ── Navigasi atas ─────────────────────────────────────────────────── */
+  .navtab {
+    @apply flex flex-col items-center justify-center gap-0.5 min-w-tap min-h-tap
+           px-2.5 py-1 rounded-lg text-[11px] font-semibold leading-none
+           bg-transparent border-0 cursor-pointer whitespace-nowrap
+           text-gray-500 dark:text-gray-400
+           hover:bg-gray-100 dark:hover:bg-gray-800
+           aria-current:text-blue-600 aria-current:bg-blue-50
+           dark:aria-current:bg-gray-800;
+  }
+
+  /* ── Baris transaksi ─────────────────────────────────────────────────
+     Padding horizontal diambil dari barisnya sendiri, dan kartunya TANPA
+     padding — supaya garis pemisah tetap penuh selebar kartu (kalau kedua
+     sisi dipasangi padding, teks jadi 37 px dari tepi dan kolomnya menyusut). */
+  .baris {
+    @apply flex items-start gap-3 px-4 py-[14px]
+           border-b border-gray-200 dark:border-gray-800;
+  }
+  .baris:last-child { @apply border-b-0; }
+  .baris-klik { @apply cursor-pointer active:bg-gray-100 dark:active:bg-gray-800; }
+  /* Nama transaksi: TIDAK dipotong — informasi harus terbaca utuh.
+     Tinggi baris jadi tidak seragam untuk catatan panjang; itu ditukar sadar
+     dengan keterbacaan (keputusan Deny). */
+  .baris-nama { @apply min-w-0 leading-snug break-words; }
+  /* Meta: satu baris untuk lencana + kategori + akun (tanpa pemotongan),
+     dan tanggal turun ke barisnya sendiri di bawahnya. Tanggal tidak dipaksa
+     sebaris karena di kolom sempit itu yang mengorbankan nama akun — BRI
+     terpotong jadi "BR…" saat tanggal ikut dijejalkan. */
+  .baris-meta {
+    @apply flex flex-wrap items-center gap-x-1.5 gap-y-0.5
+           text-xs text-gray-500 dark:text-gray-400;
+  }
+  .baris-meta > .lencana { @apply shrink-0; }
+  .baris-meta > .baris-pisah { @apply shrink-0 text-gray-300 dark:text-gray-600; }
+  /* Tanggal: baris sendiri, tidak ikut berebut ruang dengan akun.
+     Kontras di mode gelap harus >= 4.5: teks 11px sekecil ini paling cepat
+     hilang keterbacaannya. gray-400 di latar gray-950 hanya 4.16, jadi
+     dipakai gray-300 saat gelap. */
+  .baris-tanggal {
+    @apply mt-0.5 block text-[11px] text-gray-500 dark:text-gray-300;
+  }
+
+  /* ── Kartu draft ───────────────────────────────────────────────────── */
+  /* `mt-3` (12px) + gap-4 (16px) wadahnya = 28px ruang sebelum kartu draft,
+     dibanding 16px antar gelembung obrolan. Draft bukan gelembung obrolan —
+     itu panel kerja yang perlu ditandai sebagai bagian tersendiri. */
+  .draft { @apply mt-3 rounded-xl border border-gray-300 overflow-hidden
+                  bg-white dark:bg-gray-900 dark:border-gray-700; }
+  .draft-kepala {
+    @apply flex items-center justify-between gap-3 px-4 py-3 text-[13px] font-semibold
+           bg-gray-50 border-b border-gray-200
+           text-gray-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400;
+  }
+  .draft-bidang { @apply flex flex-wrap items-center gap-2 mt-3; }
+  .draft-label {
+    @apply basis-full text-xs font-semibold uppercase tracking-wide
+           text-gray-500 dark:text-gray-400;
+  }
+
+  /* ── Gelembung chat ────────────────────────────────────────────────── */
+  /* Jarak antar gelembung obrolan (user <-> bot) tetap 12px: keduanya satu
+     percakapan, dan memberi 24px membuat tanya-jawab terasa terputus.
+     Kartu DRAFT beda — itu bukan gelembung obrolan, itu panel kerja 800px
+     yang perlu ruang bernapas. Karena itu jaraknya ditulis di `.draft`
+     (margin-top), bukan di wadahnya lewat `gap` — supaya keduanya bisa
+     berbeda dalam satu kolom flex. */
+  .gelembung { @apply max-w-[92%] px-4 py-3 rounded-xl text-[15px] leading-snug; }
+  .gelembung-user { @apply self-end bg-blue-600 text-white; }
+  .gelembung-bot { @apply self-start bg-gray-50 border border-gray-200
+                           dark:bg-gray-800 dark:border-gray-700; }
+  .gelembung-error { @apply self-start bg-(--color-expense-bg) border
+                             border-(--color-expense) text-(--color-expense); }
+
+  /* ── Panel tren ────────────────────────────────────────────────────── */
+  /* Batang kelompok: pemasukan vs pengeluaran per bulan.
+     Lebar saja yang ditentukan, tinggi mengikuti rasio viewBox (320:168) —
+     kalau keduanya dipatok, browser meregangkan SVG dan batangnya gepeng.
+     Tapi `height: auto` membuat tinggi ikut lebar: di 768 px grafiknya jadi
+     694x364, terlalu tinggi untuk panel yang isinya 2 batang. Jadi tingginya
+     dibatasi, dan rasio dipertahankan dengan object-fit pada wadahnya. */
+  /* Hanya lebar yang ditentukan. Tinggi mengikuti rasio viewBox (720:200),
+     jadi batang tidak pernah gepeng. max-height TIDAK dipakai: membatasinya
+     sambil memaksa lebar penuh justru meregangkan SVG. */
+  .tren-svg { @apply block w-full; height: auto; }
+  .tren-sumbu { stroke: currentColor; opacity: 0.15; }
+
+  /* ── Peringatan ────────────────────────────────────────────────────── */
+  .peringatan {
+    @apply flex items-center gap-2 mt-3 px-3 py-1.5 rounded
+           text-xs font-semibold
+           bg-(--color-debt-bg) text-(--color-debt);
+  }
+  .teks-peringatan { @apply basis-full mt-2 text-xs leading-snug text-(--color-debt); }
+
+  /* ── Toast ─────────────────────────────────────────────────────────── */
+  .toast {
+    @apply fixed left-4 right-4 z-60 mx-auto max-w-xl px-4 py-3 rounded-lg
+           text-sm font-medium bg-blue-600 text-white shadow-lg;
+  }
+  .toast-error { @apply bg-red-600; }
+
+  /* ── Kartu per-draft di dalam kotak draft ──────────────────────────── */
+  .draft-item { @apply border-t border-gray-200 p-4 dark:border-gray-800; }
+  .draft-item:first-of-type { @apply border-t-0; }
+  .draft-acc { @apply font-medium normal-case tracking-normal whitespace-nowrap; }
+
+  /* ── Kepala kelompok hari di daftar ────────────────────────────────── */
+  /* Bagian ini sekarang sebuah TOMBOL (untuk melipat), tapi tampilannya
+     harus tetap seperti label kecil: huruf kapital, abu-abu, tanpa kotak.
+     Karena itu `appearance-none`, `border-0`, `bg-none` ditulis eksplisit —
+     tanpa itu tombol bawaan browser membawa border & latarnya sendiri. */
+  .txgroup-head {
+    @apply sticky z-20 flex w-full appearance-none items-center justify-between
+           gap-3 py-2 text-left text-xs font-semibold uppercase tracking-wider
+           text-gray-500 dark:text-gray-400
+           bg-gray-50 dark:bg-gray-950
+           border-0 bg-none cursor-pointer select-none;
+    top: var(--appbar-tinggi, 56px);
+    min-height: 44px;
+  }
+  /* Cincin fokus keyboard — header ini kini bisa dijangkau Tab, dan tanpa
+     penanda fokus yang terlihat, pengguna keyboard tidak tahu di mana dia. */
+  .txgroup-head:focus-visible {
+    @apply outline-2 outline-offset-2 outline-gray-400 dark:outline-gray-500;
+  }
+  .txgroup-head:hover {
+    @apply text-gray-700 dark:text-gray-200;
+  }
+
+  /* Chevron penanda lipatan. Satu ikon untuk dua keadaan: diputar 180°
+     saat terbuka. Transisinya pendek, dan dimatikan kalau pengguna minta
+     gerakan dikurangi (prefers-reduced-motion). */
+  .chevron-lipat {
+    @apply inline-flex transition-transform duration-150;
+  }
+  .chevron-lipat svg {
+    @apply w-4 h-4;
+  }
+  .txgroup-head[aria-expanded='true'] .chevron-lipat {
+    transform: rotate(180deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chevron-lipat { @apply transition-none; }
+  }
+}
+
+@layer utilities {
+  /* Spinner — dipakai tombol yang sedang bekerja. */
+  .spinner {
+    @apply inline-block w-[15px] h-[15px] rounded-full border-2
+           border-gray-300 border-t-blue-600;
+    animation: putar 640ms linear infinite;
+  }
+  .tombol-bekerja { @apply relative text-transparent; }
+  .tombol-bekerja::after {
+    content: "";
+    @apply absolute inset-0 m-auto w-4 h-4 rounded-full border-2
+           border-white border-t-transparent;
+    animation: putar 640ms linear infinite;
+  }
+  @keyframes putar { to { transform: rotate(360deg); } }
+
+  /* Animasi masuk saat ganti tab. */
+  .masuk { animation: masuk 140ms ease both; }
+  @keyframes masuk {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+/* Deny memutuskan: kalau sistem minta kurangi gerak, semua gerak mati. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner, .tombol-bekerja::after { animation-duration: 2s !important; }
+}

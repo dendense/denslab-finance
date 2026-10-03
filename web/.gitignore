@@ -1,0 +1,6 @@
+# Dibangun oleh Tailwind. Jangan diubah langsung — ubah src.css.
+tailwind.css
+
+# Alat build
+node_modules/
+.npm-cache/
