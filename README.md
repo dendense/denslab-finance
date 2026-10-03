@@ -1,8 +1,9 @@
-# finance
+# monica-finance*
 
 Pencatatan keuangan pribadi yang berjalan di komputermu sendiri. Catat
 pemasukan dan pengeluaran lewat kalimat biasa, lihat posisi keuangan, dan
 baca analisa bulanan.
+*memakai nama monica karena menggunakan nama AI Agent yang ku atur sebagai Financial Advisor
 
 ```
 ┌──────────────────────────────────────────────┐
