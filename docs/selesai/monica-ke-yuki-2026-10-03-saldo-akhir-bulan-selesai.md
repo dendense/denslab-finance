@@ -152,7 +152,7 @@ dan `pw.minLength = undefined` membuat input tidak punya batas sama sekali.
 
 ## 5. Permintaan: password uji, dan daftar periksa pengujian
 
-### 5a. Password uji `ujicoba123` masih terpasang
+### 5a. Password uji `[password uji — tidak ditulis di dokumen]` masih terpasang
 
 Aku periksa: `data/kredensial.json` ada, dibuat 20:11. Artinya **panel Deny
 sekarang terkunci dengan password uji itu.**

@@ -1,6 +1,21 @@
-# Dibangun oleh Tailwind. Jangan diubah langsung — ubah src.css.
-tailwind.css
-
-# Alat build
+# Alat build — dipasang ulang dengan `npm install`, jadi tidak perlu di git.
 node_modules/
 .npm-cache/
+
+# CATATAN: `tailwind.css` SENGAJA TIDAK diabaikan di sini.
+#
+# Walaupun ia hasil build, berkas itu WAJIB ikut git — aturan monica
+# (`requests/monica-ke-yuki-2026-10-03-aturan-repo-publik.md` §4).
+#
+# Alasannya: kalau diabaikan, orang yang meng-clone repo ini mendapat panel
+# TANPA GAYA SAMA SEKALI kecuali ia memasang Node.js lebih dulu dan menjalankan
+# build. Panel harus bisa dibuka langsung setelah clone.
+#
+# Jadi setiap kali `src.css` atau class Tailwind diubah:
+#     npm run css
+#     git add src.css tailwind.css      <- keduanya, selalu berpasangan
+#
+# Pernah terjadi (3 Okt 2026): berkas ini mengabaikan `tailwind.css`, dan
+# `git ls-files web/` membuktikan akibatnya — `src.css` terlacak, hasil
+# buildnya tidak. Kalau tidak ketahuan, repo publik ini akan tersebar dalam
+# keadaan rusak.

@@ -117,7 +117,7 @@ terbuka, tapi skema harus ditambah `user_id` + RLS lagi.
 | `src/db.py` | lapisan akses data — **semua angka lewat sini** |
 | `tests/test_db.py` | 24 uji; jalankan `python3 tests/test_db.py` setelah mengubah skema |
 | `src/chat_entry.py` | parser bahasa Indonesia → draft transaksi |
-| `data/finance.db` | database kerja (dibuat, masih kosong) |
+| `finance-pribadi/finance.db` | database kerja (dibuat, masih kosong) |
 
 ## Aturan yang tidak bisa dilanggar
 
@@ -144,7 +144,7 @@ Folder lokal `~/Documents/AI/finance/` **bukan** sumber kebenaran — hanya skri
 - [x] ~~**Supabase project baru**~~ — **dibatalkan**, diganti SQLite lokal (1 Okt)
 - [x] Skema SQLite + migrasi (`src/schema.sql`, `src/seed.sql`) — diuji, 24 uji lulus
 - [x] Lapisan data (`src/db.py`) — saldo, ringkasan bulanan, simpan transaksi
-- [x] Database kerja `data/finance.db` dibuat (masih kosong, saldo awal belum diisi Deny)
+- [x] Database kerja di folder data dibuat (masih kosong, saldo awal belum diisi Deny)
 - [ ] **Saldo awal tiap akun** — menunggu angka nyata dari Deny
 - [ ] Parser chat → mengembalikan draft terstruktur (bukan cetak ke terminal)
 - [ ] Panel web (yuki: tabel statistik, list transaksi, kolom chat)

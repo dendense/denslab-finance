@@ -145,7 +145,7 @@ transaksi   : 23 (database asli utuh — uji halaman Analisa kupakai SALINAN)
 net_worth   : Rp 7.482.000
 akun        : BRI Rp 7.482.000 · Mandiri Rp 0 · Tabungan Rp 0
 target      : nol (semua data uji sudah kuhapus)
-kredensial  : ada password uji sementara 'ujicoba123' — akan kuhapus setelah
+kredensial  : ada password uji sementara '[password uji — tidak ditulis di dokumen]' — akan kuhapus setelah
               selesai, dan Deny memasang sendiri
 ```
 

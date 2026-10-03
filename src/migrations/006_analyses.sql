@@ -18,7 +18,7 @@
 --      membandingkannya dengan `dibuat_pada`.
 --   3. Bulan berjalan TIDAK boleh dianalisa (belum selesai).
 --
--- Jalankan:  sqlite3 data/finance.db < src/migrations/006_analyses.sql
+-- Jalankan:  sqlite3 $FINANCE_DATA/finance.db < src/migrations/006_analyses.sql
 
 CREATE TABLE IF NOT EXISTS analyses (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

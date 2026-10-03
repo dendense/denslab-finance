@@ -15,7 +15,7 @@
 -- bawaan dihapus dari seed.sql (karena muncul kembali setiap restart), database
 -- kosong jadi keadaan yang nyata — dan bug ini muncul.
 --
--- Jalankan:  sqlite3 data/finance.db < src/migrations/005_net_worth_coalesce.sql
+-- Jalankan:  sqlite3 $FINANCE_DATA/finance.db < src/migrations/005_net_worth_coalesce.sql
 
 DROP VIEW IF EXISTS v_net_worth;
 CREATE VIEW v_net_worth AS

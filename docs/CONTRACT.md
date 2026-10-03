@@ -495,10 +495,10 @@ perlu mengirim apa pun, cukup `flow_type` yang baru.
 
 ### `DELETE /api/transactions/<id>`
 
-**Hapus keras**, tapi barisnya dicatat lebih dulu ke `data/terhapus.log`.
+**Hapus keras**, tapi barisnya dicatat lebih dulu ke `terhapus.log` (di folder data).
 
 ```json
-{ "ok": true, "id": 77, "dihapus": true, "pemulihan": "data/terhapus.log",
+{ "ok": true, "id": 77, "dihapus": true, "pemulihan": "terhapus.log",
   "transaksi": { "id": 77, "amount": 300000, "note": "Dana masuk", ... } }
 ```
 

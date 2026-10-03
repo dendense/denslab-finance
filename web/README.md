@@ -2,7 +2,7 @@
 
 > ## ⚠️ Aturan wajib saat menguji panel ini
 >
-> `data/finance.db` berisi **data keuangan sungguhan**. Data uji yang ditulis untuk
+> database keuangan berisi **data sungguhan**. Data uji yang ditulis untuk
 > verifikasi **wajib dihapus kembali** — jangan ditinggalkan.
 >
 > Sebelum menghapus: cetak baris yang akan dihapus beserta jumlahnya, pastikan
@@ -13,7 +13,7 @@
 > Baris uji sebaiknya diberi penanda di catatan, mis. `UJI-yuki: kopi`, supaya
 > bisa dibedakan dari catatan sungguhan.
 >
-> **Cara paling aman menguji alur tulis:** salin `data/finance.db` ke `/tmp`,
+> **Cara paling aman menguji alur tulis:** salin database keuangan ke `/tmp`,
 > jalankan server kedua di port lain, dan uji di sana. Database Deny tidak
 > tersentuh sama sekali, jadi tidak ada yang perlu dihapus. Dipakai untuk seluruh
 > uji Simpan/Edit/Hapus — lihat "Cara menguji alur tulis" di bawah.
@@ -100,19 +100,25 @@ Dipakai untuk seluruh uji Simpan/Edit/Hapus. Database asli tidak tersentuh,
 jadi tidak ada yang perlu dihapus sesudahnya.
 
 ```bash
-rm -rf /tmp/uji && mkdir -p /tmp/uji/web /tmp/uji/data
+# 1. Salin kode + data ke folder sementara
+rm -rf /tmp/uji && mkdir -p /tmp/uji/src /tmp/uji/web /tmp/uji/data-tes
 cd /tmp/uji
-cp ~/Documents/AI/finance/web/*.html ~/Documents/AI/finance/web/*.js \
-   ~/Documents/AI/finance/web/*.css web/
-cp -R ~/Documents/AI/finance/src .
-cp ~/Documents/AI/finance/data/finance.db data/finance.db
-# kredensial sengaja TIDAK disalin -> server uji mulai dalam mode "pasang password"
-python3 -c "
-import sys; sys.path.insert(0,'/tmp/uji/src'); import auth
-auth.pasang_password('ujicoba9')   # password HANYA untuk salinan di /tmp
-"
-python3 src/server.py --port 8795
+cp -R ~/Documents/AI/finance/src/. src/
+cp -R ~/Documents/AI/finance/web/. web/
+cp "${FINANCE_DATA:-$HOME/Documents/AI/finance-pribadi}/finance.db" data-tes/finance.db
+
+# 2. Tandai folder data SEMENTARA (wajib — pengaman lokasi data akan menolak
+#    folder berisi database tanpa penanda; lihat "Pengaman lokasi data" di bawah)
+touch data-tes/.finance-data
+
+# 3. Jalankan dengan FINANCE_DATA menunjuk ke SALINAN, bukan data Deny
+FINANCE_DATA=/tmp/uji/data-tes python3 src/server.py --port 8795
 ```
+
+Tanpa `FINANCE_DATA`, server akan menunjuk ke **data Deny** — dan tulisan uji
+masuk ke catatan keuangan sungguhan. Kredensial sengaja tidak disalin, jadi
+server uji mulai dalam mode "pasang password" dan kamu bisa memasang password
+uji sendiri lewat panel.
 
 Bersihkan setelah selesai: `kill <pid>` lalu `rm -rf /tmp/uji`.
 

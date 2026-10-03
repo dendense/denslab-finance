@@ -138,7 +138,7 @@ sepaham:
 ```
 transaksi : 23 · net_worth : Rp 7.482.000 · target : nol
 database  : bersih dari data uji (uji Analisa pakai salinan di /tmp)
-kredensial: password uji sementara 'ujicoba123' — akan kuhapus setelah selesai
+kredensial: password uji sementara '[password uji — tidak ditulis di dokumen]' — akan kuhapus setelah selesai
 ```
 
 ---

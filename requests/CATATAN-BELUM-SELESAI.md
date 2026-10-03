@@ -152,7 +152,7 @@ selesai, jadi tidak ada yang bisa diuji. Coba lagi setelah ada.
 
 ### Password uji — SUDAH DIHAPUS
 
-`data/kredensial.json` dihapus 3 Okt 21:00 setelah pengujian login selesai. Deny
+`kredensial.json` (di folder data) dihapus 3 Okt 21:00 setelah pengujian login selesai. Deny
 memasang passwordnya sendiri lewat `python3 scripts/reset_password.py`.
 
 **Aturan mulai sekarang:** **jangan tulis password apa pun di surat**, walau cuma

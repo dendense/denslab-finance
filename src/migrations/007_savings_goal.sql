@@ -16,7 +16,7 @@
 -- terhitung di progres. Ini harus ditulis di panelnya supaya tidak
 -- membingungkan — bukan sesuatu yang bisa diselesaikan oleh skema.
 --
--- Jalankan:  sqlite3 data/finance.db < src/migrations/007_savings_goal.sql
+-- Jalankan:  sqlite3 $FINANCE_DATA/finance.db < src/migrations/007_savings_goal.sql
 
 CREATE TABLE IF NOT EXISTS savings_goals (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

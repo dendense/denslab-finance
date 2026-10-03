@@ -119,6 +119,146 @@ function timeLabel(ts) {
   const m = String(ts || '').match(/(\d{2}):(\d{2})/);
   return m ? m[1] + ':' + m[2] : '';
 }
+
+/* Catatan untuk DITAMPILKAN: sensor nominal dulu (kalau menyala), lalu
+   rapikan kapitalisasinya. Dipakai di SEMUA tempat yang menampilkan catatan
+   ke Deny, supaya tidak ada layar yang tampil berbeda dari layar lain.
+
+   Sensor DULU, baru kapitalisasi: `samarkanAngka()` mengganti digit dengan
+   '•', dan itu tidak mengubah huruf sama sekali — jadi urutannya tidak
+   berpengaruh pada hasil. Tapi menulisnya dalam urutan ini membuat niatnya
+   jelas: yang dilihat Deny adalah angka yang sudah disembunyikan, lalu
+   dirapikan hurufnya. */
+function catatanTampil(note, cadangan) {
+  const teks = note || cadangan || '';
+  return rapikanJudul(SENSOR ? samarkanAngka(teks) : teks);
+}
+
+/* ── Kapitalisasi judul transaksi (permintaan Deny, 3 Okt) ───────────────
+   "judul setiap transaksi dibuat capitalize case walaupun dalam pengetikan
+   kita hanya tulis lowercase"
+
+   DIPAKAI HANYA SAAT MENAMPILKAN. Data di database TIDAK diubah — dan itu
+   keputusan yang disengaja, bukan kelalaian:
+     1. Catatan asli tetap apa adanya. Kalau suatu saat aturan ini diubah atau
+        dibatalkan, tidak ada data yang perlu dikembalikan.
+     2. Pencarian di sisi server tetap memakai teks yang kamu tulis. Kalau UI
+        menulis ulang teksnya ke database, "parkir" yang kamu cari bisa jadi
+        sudah tersimpan sebagai "Parkir" dan pencarian jadi tidak konsisten.
+
+   ATURANNYA — sebuah kata dirapikan HANYA kalau kata itu seluruhnya huruf
+   kecil. Begitu ada satu huruf kapital di mana pun, kata itu dilewati utuh.
+   Aturan ini yang melindungi merek & akronim di catatan Deny, yang sudah
+   diuji terhadap 25 catatan sungguhan: SirayAI, QRIS, GoPaylater, SPinjam,
+   BRIVA, BI-Fast, TWP TNI AU, Kaget30GB28Hari, MDB, Azko — semuanya utuh,
+   nol dari 12 rusak.
+
+   Yang SENGAJA tidak dilakukan: mengubah huruf di TENGAH kata. Jadi
+   'e-toll' tetap 'e-toll' (lihat PERTAHANKAN), dan 'parkir' jadi 'Parkir'.
+
+   Kata sambung & kata depan (ke, di, via, dan, ...) tetap huruf kecil kalau
+   bukan kata pertama — itu konvensi judul, dan tanpa aturan ini hasilnya
+   "Pembayaran BRIVA Ke TWP TNI AU" yang terasa salah saat dibaca.
+*/
+const KECIL_SELALU = new Set([
+  // Indonesia
+  'ke', 'di', 'dari', 'dan', 'atau', 'yang', 'untuk', 'pada', 'dengan',
+  'oleh', 'itu', 'ini', 'serta', 'juga', 'agar', 'supaya', 'karena',
+  'kalau', 'jika', 'sampai', 'tapi', 'tetapi', 'sebagai',
+  // Inggris (dipakai di catatannya: via, per, of, to, for, the, ...)
+  'via', 'per', 'of', 'to', 'for', 'the', 'a', 'an', 'at', 'in', 'on',
+  'by', 'with', 'and', 'or', 'from',
+]);
+
+/* Kata yang penulisan resminya huruf kecil semua dan HARUS dibiarkan.
+   Ditulis eksplisit — bukan disimpulkan kode — supaya kalau nanti ada merek
+   lain, jelas ke mana menambahkannya. */
+const PERTAHANKAN = new Set(['e-toll']);
+
+function rapikanJudul(teks) {
+  if (!teks) return teks;
+
+  /* Pisah pada spasi TAPI simpan pemisahnya, supaya spasi berlipat dan
+     baris baru tidak hilang saat disatukan kembali. */
+  const bagian = String(teks).split(/(\s+)/);
+  let posisiKata = 0;
+
+  return bagian.map((b) => {
+    if (!b.trim()) return b;                 /* spasi / baris baru */
+    const pertama = posisiKata === 0;
+    posisiKata += 1;
+
+    if (PERTAHANKAN.has(b.toLowerCase())) return b;
+    if (/[A-Z]/.test(b)) return b;           /* sudah ada kapital -> utuh */
+    if (!/[a-z]/.test(b)) return b;          /* angka / tanda baca -> utuh */
+    if (!pertama && KECIL_SELALU.has(b.toLowerCase())) return b.toLowerCase();
+
+    /* Hanya huruf PERTAMA yang dikapitalkan. Tanda hubung dan garis miring
+       tidak dianggap pemisah kata, jadi satu kata tetap satu kata. */
+    return b[0].toUpperCase() + b.slice(1);
+  }).join('');
+}
+
+/* ── Keterangan "kapan dicatat" untuk baris di halaman Daftar ────────────
+   Permintaan Deny (3 Okt): halaman Daftar belum punya keterangan jam,
+   padahal `created_at` sudah dikirim API.
+
+   Mengembalikan {teks, judul} — atau null kalau keterangannya TIDAK BOLEH
+   ditampilkan. null dipakai di tiga keadaan berbeda, dan ketiganya disengaja:
+
+   1. `created_at` kosong/tidak berbentuk tanggal.
+      Baris lama bisa tidak punya jam. Menampilkan "NaN" atau karangan sendiri
+      lebih buruk daripada tidak menampilkan apa pun.
+
+   2. `source == 'statement'` (transaksi impor rekening koran).
+      Terukur di database Deny: 15 baris impor punya `created_at` yang SAMA
+      PERSIS — 2026-10-03 07:46:26 — karena ditulis satu skrip dalam satu
+      detik. Menampilkan "07:46 dicatat" di limabelas baris membuat Deny
+      mengira dia mencatatnya berbarengan; yang sebenarnya terjadi adalah
+      skripnya berjalan sekali. Jadi yang disebut ASALNYA, bukan jamnya.
+      (Rencana ini sudah disetujui monica.)
+
+   3. Belum ada `created_at` (baris yang dibuat sebelum kolomnya ada).
+
+   Kenapa tanda "·" dipakai untuk memisah tanggal dan jam: `dateLabel()`
+   sudah dipakai di barisnya sendiri, dan tanpa pemisah "3 Okt 2026 23:36"
+   terbaca seperti satu tanggal panjang. */
+function keteranganDicatat(t) {
+  if (!t) return null;
+
+  const sumber = String(t.source || 'manual');
+
+  /* Impor statement: jamnya tidak bermakna, sebut asalnya. */
+  if (sumber === 'statement') {
+    return {
+      teks: 'impor rekening koran',
+      judul: 'Baris ini masuk dari impor rekening koran, bukan dicatat satu '
+        + 'per satu. Jam impornya sama untuk semua baris, jadi tidak '
+        + 'ditampilkan.',
+    };
+  }
+
+  const jam = timeLabel(t.created_at);
+  if (!jam) return null;   /* tidak ada jam yang bisa dipercaya */
+
+  const tglCatat = String(t.created_at).slice(0, 10);
+  const tglKejadian = String(t.occurred_on).slice(0, 10);
+
+  /* Kalau dicatat di hari yang sama dengan kejadiannya, tanggalnya sudah ada
+     di baris itu — cukup jamnya saja. Kalau BEDA, tanggalnya wajib disebut:
+     menulis "3 Okt 23:36" untuk kejadian 2 Okt itu berbohong. */
+  if (tglCatat === tglKejadian) {
+    return {
+      teks: '· ' + jam + ' dicatat',
+      judul: 'Dicatat ' + dateLabel(tglCatat) + ' pukul ' + jam,
+    };
+  }
+  return {
+    teks: '· dicatat ' + dateLabel(tglCatat) + ' ' + jam,
+    judul: 'Kejadiannya ' + dateLabel(tglKejadian) + ', dicatat '
+      + dateLabel(tglCatat) + ' pukul ' + jam,
+  };
+}
 function addMonths(ym, delta) {
   const [y, m] = String(ym).split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -631,7 +771,7 @@ function txRow(t, compact) {
      "Transfer BI-Fast ke 098765432109876"). Saat sensor menyala, angka di
      dalamnya ikut disamarkan — kalau tidak, nominal tetap terbaca di layar
      walau kolom nominalnya sudah bertitik-titik. */
-  const teksCatatan = samarkanAngka(t.note) || '(tanpa catatan)';
+  const teksCatatan = catatanTampil(t.note, '(tanpa catatan)');
   const note = el('p', 'baris-nama m-0 mb-1 font-medium', teksCatatan);
   /* Kalau nama dipotong di kolom sempit, teks lengkapnya tetap harus bisa
      dibaca — title untuk tetikus, aria-label untuk pembaca layar.
@@ -639,7 +779,7 @@ function txRow(t, compact) {
      dan nomor rekening. Saat sensor menyala, keduanya harus ikut disamarkan —
      tanpa ini tooltip jadi jalan bocor nominal yang sudah disembunyikan. */
   if (t.note) {
-    const teks = SENSOR ? samarkanAngka(t.note) : t.note;
+    const teks = catatanTampil(t.note);
     note.title = teks;
     note.setAttribute('aria-label', teks);
   }
@@ -660,10 +800,53 @@ function txRow(t, compact) {
   main.appendChild(meta);
 
   /* Tanggal di barisnya SENDIRI, bukan dijejalkan ke baris meta. Di kolom
-     sempit, memaksa tanggal sebaris membuat nama akun terpotong ("BR…"). */
-  const tgl = el('span', 'baris-tanggal',
-    compact ? dayLabel(t.occurred_on) : dateLabel(t.occurred_on));
-  main.appendChild(tgl);
+     sempit, memaksa tanggal sebaris membuat nama akun terpotong ("BR…").
+
+     SEJAK 3 Okt: jam dicatat duduk di SEBELAH tanggal (permintaan Deny),
+     bukan di baris bawahnya. Yang dijaga tetap sama seperti alasan di atas —
+     keduanya harus muat di satu baris tanpa memotong apa pun. Karena itu
+     wadahnya `flex-wrap`, BUKAN satu baris yang dipaksa: kalau tanggal + jam
+     tidak muat di lebar yang tersedia, jamnya turun sendiri ke bawah
+     tanggalnya. Itu lebih baik daripada meluber keluar kartu atau terpotong
+     elipsis, dan tanpa `flex-wrap` salah satu dari keduanya pasti terjadi di
+     layar 360px dengan catatan panjang. */
+  const barisWaktu = el('div', 'flex flex-wrap items-baseline gap-x-2');
+  barisWaktu.appendChild(el('span', 'baris-tanggal',
+    compact ? dayLabel(t.occurred_on) : dateLabel(t.occurred_on)));
+
+  /* ── Keterangan WAKTU DICATAT (permintaan Deny, 3 Okt) ────────────────
+     Halaman Daftar tidak punya keterangan jam, padahal `created_at` sudah
+     dikirim API dan sudah dipakai di kartu Beranda. Akibatnya dua transaksi
+     di tanggal sama tidak bisa dibedakan mana yang dicatat lebih dulu.
+
+     DUA hal yang membuat ini mudah salah, dan keduanya sudah diukur:
+
+     1. `source == 'statement'` TIDAK boleh menampilkan jam. Ke-15 transaksi
+        impor punya `created_at` yang SAMA PERSIS (2026-10-03 07:46:26) karena
+        dibuat oleh satu skrip dalam satu detik. Menampilkan "07:46 dicatat" di
+        limabelas baris membuat Deny mengira dia mencatatnya berbarengan —
+        padahal itu jam skrip, bukan waktu kejadian. Yang benar: sebut ASALNYA.
+        (Rencana ini sudah disetujui monica.)
+
+     2. Tanggal dan jam dipisah dengan "·", dan hanya tanggalnya yang
+        disalin dari `created_at` kalau `occurred_on` berbeda. Transaksi bisa
+        dicatat BESOK untuk kejadian HARI INI (mis. belanja malam baru
+        dicatat pagi), dan menulis "3 Okt 23:36" padahal kejadiannya 2 Okt
+        itu berbohong. jadi:
+          occurred_on == created_at  ->  "3 Okt 2026 · 23:36 dicatat"
+          berbeda                    ->  "2 Okt 2026 · dicatat 3 Okt 23:36"
+     Yang tidak ada dibuat sendiri di UI: `created_at` bisa kosong di baris
+     lama; kalau kosong, keterangannya dihilangkan — lebih baik tidak ada
+     keterangan daripada keterangan yang salah. */
+  if (!compact) {
+    const waktu = keteranganDicatat(t);
+    if (waktu) {
+      const w = el('span', 'baris-waktu', waktu.teks);
+      if (waktu.judul) w.title = waktu.judul;
+      barisWaktu.appendChild(w);
+    }
+  }
+  main.appendChild(barisWaktu);
   li.appendChild(main);
 
   const sum = el('div', 'shrink-0 text-right');
@@ -693,21 +876,21 @@ function txRow(t, compact) {
        catatannya mengandung nominal — jadi harus disamarkan di sini juga,
        kalau tidak tooltipnya jadi jalan bocor. */
     const labelEdit = 'Edit transaksi '
-      + (SENSOR ? samarkanAngka(t.note) : (t.note || 'tanpa catatan'));
+      + catatanTampil(t.note, 'tanpa catatan');
     ubah.setAttribute('aria-label', labelEdit);
     ubah.title = labelEdit;
     ubah.addEventListener('click', () => formEditTransaksi(li, t));
     li.appendChild(ubah);
 
     /* Tombol Hapus — hanya di halaman Daftar, sama seperti Edit.
-       Hapusnya KERAS (monica menyimpan salinannya ke data/terhapus.log
+       Hapusnya KERAS (monica menyimpan salinannya ke terhapus.log
        sebelum barisnya dibuang), jadi konfirmasinya dua langkah dan
        menyebut catatan + nominal supaya tidak salah baris. */
     const hapus = el('button', 'tombol tombol-hantu tombol-ikon tombol-bahaya shrink-0');
     hapus.type = 'button';
     hapus.appendChild(ikon('hapus'));
     const labelHapus = 'Hapus transaksi '
-      + (SENSOR ? samarkanAngka(t.note) : (t.note || 'tanpa catatan'));
+      + catatanTampil(t.note, 'tanpa catatan');
     hapus.setAttribute('aria-label', labelHapus);
     hapus.title = labelHapus;
     hapus.addEventListener('click', () => formHapusTransaksi(li, t));
@@ -738,7 +921,7 @@ function formHapusTransaksi(li, t) {
   /* Nama + nominal disebut, dan untuk transfer akun tujuannya juga —
      supaya Deny tahu baris mana yang sedang dia buang. */
   const rincian = el('p', 'm-0 text-xs leading-snug text-gray-600 dark:text-gray-300');
-  const teks = SENSOR ? samarkanAngka(t.note || 'tanpa catatan') : (t.note || 'tanpa catatan');
+  const teks = catatanTampil(t.note, 'tanpa catatan');
   const akun = (t.account_name || '?')
     + (t.to_account_name ? ' → ' + t.to_account_name : '');
   rincian.textContent = teks + ' · ' + rupiah(t.amount) + ' · '
@@ -747,7 +930,7 @@ function formHapusTransaksi(li, t) {
 
   li.appendChild(el('p', 'm-0 text-xs leading-snug text-gray-500 dark:text-gray-400',
     'Transaksinya dihapus dari daftar dan dari semua angka. Salinannya disimpan '
-    + 'di data/terhapus.log, tapi mengembalikannya tidak bisa lewat panel ini.'));
+    + 'di terhapus.log, tapi mengembalikannya tidak bisa lewat panel ini.'));
 
   const pesan = el('p', 'm-0 text-xs text-(--color-expense)');
   pesan.hidden = true;
@@ -809,9 +992,12 @@ function formEditTransaksi(li, t) {
   li.appendChild(judul);
 
   /* Nominal & catatan asli ditampilkan supaya Deny tahu persis baris mana
-     yang sedang diubah — nama transaksi bisa mirip satu sama lain. */
+     yang sedang diubah — nama transaksi bisa mirip satu sama lain.
+     Catatannya dirapikan seperti di daftar: kalimat ini milik layar, bukan
+     milik kolom input, jadi hurufnya harus sama dengan yang dilihat Deny
+     di baris daftar. Kolom inputnya sendiri tetap berisi teks ASLI. */
   const asal = el('p', 'm-0 text-xs leading-snug text-gray-500 dark:text-gray-400',
-    'Sebelumnya: ' + (SENSOR ? samarkanAngka(t.note || 'tanpa catatan') : (t.note || 'tanpa catatan'))
+    'Sebelumnya: ' + catatanTampil(t.note, 'tanpa catatan')
     + ' · ' + rupiah(t.amount) + ' · ' + dateLabel(t.occurred_on)
     + ' · ' + (t.account_name || '?'));
   li.appendChild(asal);

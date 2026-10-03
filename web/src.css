@@ -243,8 +243,30 @@
      Kontras di mode gelap harus >= 4.5: teks 11px sekecil ini paling cepat
      hilang keterbacaannya. gray-400 di latar gray-950 hanya 4.16, jadi
      dipakai gray-300 saat gelap. */
+  /* Tanggal & jam dicatat duduk di SATU baris (permintaan Deny 3 Okt).
+     Keduanya `inline` di dalam wadah flex — bukan `block` — supaya bisa
+     bersebelahan. `mt-0.5` dibuang dari tanggal: jarak dari baris meta
+     sekarang diatur wadahnya, satu tempat saja. */
   .baris-tanggal {
-    @apply mt-0.5 block text-[11px] text-gray-500 dark:text-gray-300;
+    @apply text-[11px] text-gray-500 dark:text-gray-300;
+  }
+
+  /* Keterangan waktu dicatat — di SEBELAH tanggal, bukan di bawahnya.
+     Dibuat lebih redup dari tanggal: tanggal kejadian itu informasi utama,
+     jam pencatatan keterangan tambahan yang dicari hanya sesekali.
+
+     Warnanya WAJIB `text-gray-500 dark:text-gray-400` — bukan gray-400 di
+     kedua tema. Terukur: gray-400 di atas latar terang hanya 2.60:1 dan GAGAL
+     ambang AA 4.5:1 untuk teks sekecil ini (11px). Pola ini persis kesalahan
+     yang sudah pernah saya buat dan perbaiki di 8 tempat lain di app.js; di
+     sini sempat terulang. gray-500/gray-400 memberi 4.84:1 (terang) dan
+     6.82:1 (gelap) — keduanya lulus.
+
+     `whitespace-nowrap` dipasang supaya "· 23:36 dicatat" tidak terpecah di
+     tengah saat wadahnya membungkus — yang boleh pindah baris adalah
+     SELURUH keterangannya, bukan sebagian. */
+  .baris-waktu {
+    @apply text-[11px] whitespace-nowrap text-gray-500 dark:text-gray-400;
   }
 
   /* ── Kartu draft ───────────────────────────────────────────────────── */
