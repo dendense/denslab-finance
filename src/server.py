@@ -12,6 +12,7 @@ Ini HANYA jalan di Mac ini. Tidak bisa diakses dari HP — konsekuensi keputusan
 """
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -425,6 +426,92 @@ def api_savings_delete():
 
 
 # ── autentikasi ──────────────────────────────────────────────────────────────
+def api_ai_status(params):
+    """Cek apakah AI untuk kolom catat bisa dipakai. Dipakai panel `#ai-host`.
+
+    KENAPA endpoint ini ada: sebelumnya satu-satunya cara mengetahui AI hidup
+    adalah dengan MENGIRIM kalimat ke model — dan itu membakar kuota Deny setiap
+    kali halaman dimuat. Endpoint ini hanya mengirim satu pesan satu kata, dan
+    dipanggil ketika Deny menekan "Periksa", bukan otomatis.
+
+    Bentuk balasan mengikuti kontrak yang diminta yuki di
+    requests/CATATAN-BELUM-SELESAI.md §5c:
+        ok, model, endpoint, latensi_ms, pesan
+
+    ATURAN: endpoint dan model dibaca dari server, TIDAK BISA diubah dari UI.
+    Kunci API tidak pernah ikut terkirim ke browser — UI hanya perlu tahu
+    "hidup atau tidak", bukan alamat atau kuncinya (CONTRACT.md §1).
+    """
+    import time
+    import urllib.request
+    import urllib.error
+
+    model = model_config.MODEL
+    endpoint = model_config.BASE
+
+    key = os.environ.get("NINE_ROUTER_API_KEY", "").strip()
+    if not key:
+        # Jangan sebut nama variabel environment ke UI — itu bocoran yang tidak
+        # perlu diketahui browser. Cukup katakan belum diatur.
+        return {
+            "ok": False, "model": model, "endpoint": endpoint,
+            "latensi_ms": None, "keadaan": "gagal",
+            "pesan": "Kunci API belum diatur di server. Minta pemiliknya "
+                     "mengisinya pada berkas env, lalu jalankan ulang peluncurnya.",
+        }
+
+    body = json.dumps({
+        "model": model,
+        "max_tokens": 5,
+        "messages": [{"role": "user", "content": "ok"}],
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        endpoint, data=body,
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer " + key})
+
+    mulai = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=model_config.TIMEOUT) as r:
+            d = json.loads(r.read().decode("utf-8", "ignore"))
+        latensi = int((time.time() - mulai) * 1000)
+
+        # Model yang menjawab bisa berbeda dari yang diminta (router mengalihkan
+        # ke model cadangan). Laporkan yang BENAR-BENAR menjawab, bukan yang
+        # kita minta — kalau tidak, panel akan menampilkan model yang salah.
+        menjawab = d.get("model") or model
+
+        # Ambang "lambat": 5 detik. Di bawah itu terasa biasa; di atasnya Deny
+        # akan mengira panelnya menggantung.
+        if latensi > 5000:
+            keadaan, pesan = "lambat", "AI menjawab tapi lambat."
+        else:
+            keadaan, pesan = "ok", "AI siap dipakai."
+
+        return {"ok": True, "model": menjawab, "endpoint": endpoint,
+                "latensi_ms": latensi, "keadaan": keadaan, "pesan": pesan}
+
+    except urllib.error.HTTPError as e:
+        latensi = int((time.time() - mulai) * 1000)
+        try:
+            detail = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            detail = ""
+        return {
+            "ok": False, "model": model, "endpoint": endpoint,
+            "latensi_ms": latensi, "keadaan": "gagal",
+            "pesan": "AI tidak menjawab (HTTP %d). %s" % (e.code, detail.strip()),
+        }
+    except Exception as e:
+        latensi = int((time.time() - mulai) * 1000)
+        return {
+            "ok": False, "model": model, "endpoint": endpoint,
+            "latensi_ms": latensi, "keadaan": "gagal",
+            "pesan": "AI tidak bisa dihubungi (%s)." % type(e).__name__,
+        }
+
+
 def api_auth_status(params):
     """Status login. Dipakai halaman login untuk tahu form mana yang ditampilkan.
 
@@ -648,6 +735,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/analysis": api_analysis,
             "/api/savings": api_savings,
             "/api/months": api_months,
+            "/api/ai-status": api_ai_status,
             "/api/auth": api_auth_status,
             "/api/auth/status": api_auth_status_lengkap,
         }

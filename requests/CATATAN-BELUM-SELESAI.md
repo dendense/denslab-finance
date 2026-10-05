@@ -1,47 +1,176 @@
 # Catatan pekerjaan belum selesai — panel web finance
 
 **Dari:** yuki (FRONTEND)
-**Terakhir diperbarui:** 4 Okt 2026, 00:50
+**Terakhir diperbarui:** 5 Okt 2026 (monica) — §5 endpoint selesai, §4 duplikat dibersihkan
 
 Berkas ini daftar hal yang **sudah diminta Deny tapi belum dikerjakan**, supaya
 sesi berikutnya tidak perlu menebak atau mengulang. Setiap butir menyebut apa
 yang menghalanginya.
 
-> ## ⏸️ PENGEMBANGAN DIHENTIKAN — keputusan Deny, 4 Okt 2026
+> ## ⏸️ PENGEMBANGAN DIBUKA LAGI — 5 Okt 2026
 >
-> > *"cukupkan development sampai saat ini, kita lanjutkan jika ditemukan bug
-> > yang serius atau ingin menambahkan fitur baru"*
+> Deny membuka pengembangan untuk **bug serius**. Yang dikerjakan 5 Okt: §1
+> (chip kategori), §4 (pesan gagal), §5 (panel cek AI). Butir §2 dan §3 **masih
+> ditahan** — keduanya memperbaiki yang *berfungsi*, bukan yang *rusak*.
 >
-> **Jadi jangan kerjakan butir 1-3 di bawah tanpa Deny memintanya.** Butir 4
-> (temuan jalur gagal) **bukan** pekerjaan baru — itu daftar tempat yang perlu
-> diperiksa kalau ada bug serius. §1, §2, §3 sengaja tidak dikerjakan: keduanya
-> memperbaiki hal yang **berfungsi**, bukan yang **rusak**.
->
-> Kalau kamu membuka berkas ini di sesi berikutnya: **tanya Deny dulu** apakah
-> pengembangannya sudah dibuka lagi. Jangan mengerjakan §2/§3 hanya karena
-> tertulis di sini.
+> Sebelum mengerjakan apa pun di sini: **tanya Deny dulu** apakah masih dibuka.
 
-**Cara memakai berkas ini:** butir 1–3 **belum dikerjakan** (dan ditahan).
-Butir 4 **temuan**, bukan tugas. Bagian "Sudah selesai" jangan dikerjakan ulang.
+**Cara memakai berkas ini:** §5 = pekerjaan **baru** (5 Okt). §2–§3 ditahan.
+§4 = temuan, **sudah disisir dan dikerjakan**. Bagian "Sudah selesai" jangan
+dikerjakan ulang.
 
 ---
 
-## 1. Chip kategori masih dari `state.categories`, bukan `/api/categories`
+## 5. Panel cek jaringan AI di halaman Catat — SIAP (5 Okt)
+
+**Status:** ✅ UI selesai · ✅ **endpoint selesai** (monica, 5 Okt —
+`requests/monica-ke-yuki-2026-10-05-endpoint-ai-status.md`). Tinggal
+menyambungkan.
+
+`GET /api/ai-status` → `{ok, model, endpoint, latensi_ms, keadaan, pesan}`
+
+`keadaan` berisi `ok` / `lambat` / `gagal` — **ambang "lambat" (5 detik) ada di
+server, jangan diduplikasi di UI.** Panggil saat Deny menekan "Periksa", bukan
+setiap muat halaman: setiap panggilan membakar kuota.
+
+Deny minta panel di atas panel chat untuk melihat apakah AI-nya bisa dipakai.
+Deny awalnya minta **kolom URL + API key yang bisa diisi sendiri dari UI** —
+itu **ditolak yuki**, dan alasannya dicatat di §5b. Yang dikerjakan: versi
+**tanpa kunci** dengan indikator hijau/kuning/merah.
+
+### 5a. Yang sudah dikerjakan (UI)
+
+`renderStatusAI()` di `web/app.js` + `#ai-host` di `web/index.html`. Selalu
+terbuka (bukan dilipat), di atas panel chat, memakai token warna yang ada.
+
+Indikatornya punya **empat** keadaan, bukan tiga — "belum diperiksa" bukan
+"hijau":
+
+| Keadaan | Warna | Arti |
+|---|---|---|
+| `ok` | hijau | AI menjawab |
+| `lambat` | kuning | menjawab tapi lambat |
+| `gagal` | merah | tidak menjawab — sebabnya ditampilkan |
+| `belum` | abu | belum diperiksa — **jangan tampilkan hijau** |
+
+### 5b. KENAPA panel ini TIDAK punya kolom API key — jangan tambahkan
+
+Ini keputusan sengaja, sudah ditolak sekali. **Jangan "memperbaiki" dengan
+menambahkan kolom kunci.**
+
+1. Kunci di UI = kunci di browser = kunci terkirim lewat HTTP dan tersimpan di
+   `localStorage`/`finance.db`. Berkas `finance.db.cadangan-sebelum-rapi` dan
+   `cadangan-*.tgz` di `finance-pribadi/` akan **ikut memuat kunci** itu.
+2. `env.sh` sengaja diletakkan **di luar repo** justru supaya kunci tidak ikut
+   ter-push. Repo ini pernah publik (monica menulis aturan repo publik 3 Okt).
+   Menaruh kunci di DB membatalkan pengaman itu.
+3. `CONTRACT.md` §1 menetapkan UI hanya memanggil endpoint finance. UI **tidak
+   boleh tahu alamat provider** (9Router/Kenari) — itu pengetahuan server.
+4. Cara mengganti endpoint/kunci: **satu baris di `env.sh`**
+   (`NINE_ROUTER_BASE`, `NINE_ROUTER_API_KEY`), dibaca `src/model_config.py:34`.
+   Bukan lewat UI.
+
+### 5c. Yang DIBUTUHKAN dari monica — endpoint baru
+
+| Method | Path | Isi yang dibutuhkan |
+|---|---|---|
+| `GET` | `/api/ai-status` | `ok`, `model`, `endpoint`, `latensi_ms`, `pesan` |
+
+`endpoint` ditampilkan sebagai **INFORMASI** (Deny bilang endpoint sudah pindah
+ke Kenari langsung) — dibaca dari server, **tidak bisa diubah dari UI**.
+
+Sebelum endpoint ini ada, panel jatuh ke keadaan `belum` dan **tidak
+menampilkan hijau** — lebih baik terlihat "belum tahu" daripada berpura-pura
+sehat. Jangan juga memakai `/api/parse` untuk cek lalu lintas setiap muat
+halaman: itu mengirim kalimat ke model dan membakar kuota Deny diam-diam.
+
+---
+
+## 4. TEMUAN: pola "gagal" yang terbaca seperti "data kosong" — SELESAI 5 Okt
+
+**Status:** ✅ **selesai.** Disisir satu per satu; semuanya sudah membedakan
+gagal vs kosong: `renderSisaBulanLalu()`, `renderTargetTabungan()`,
+`renderAkun()`, pemilih bulan serta `/api/analysis` di halaman Analisa.
+
+**Satu yang sengaja TIDAK diuji hidup:** `/api/analysis` benar-benar mati
+(kodenya terpisah dan sudah ditangani, tapi belum dibuktikan dengan endpoint
+yang dimatikan sungguhan). Bukan bug yang diketahui — cuma lubang bukti.
+
+**Tiga cacat nyata ketemu saat menyisir ini, sudah diperbaiki 5 Okt:**
+
+| Cacat | Sebelum | Sesudah |
+|---|---|---|
+| Tombol "Isi manual" menempel ke kalimat | `...environmentIsi manual` | elemen terpisah, ukur `menempel: false` |
+| Pesan gagal bocorkan nama env var | `Model tidak bisa dihubungi: NINE_ROUTER_API_KEY tidak ada di environment` | `Catat pintar sedang tidak bisa dipakai — model tidak menjawab. Kamu tetap bisa mengisi manual.` |
+| `favicon.ico` 404 di setiap muat | 404 di log | ikon data-URI; `performance` mencatat **nol** permintaan favicon |
+
+**Bug ketiga yang ketemu sendiri** — `src/chat_entry.py:98`: `except Exception:`
+tidak menangkap `e2`, jadi `% e` merujuk kegagalan model **utama**. Saat model
+utama dan cadangan sama-sama gagal, sebab kegagalan **cadangan hilang** —
+padahal itu yang paling berguna untuk mendiagnosa. Sekarang menangkap `e2` dan
+menyebut keduanya.
+
+**Tempat KEDUA yang bisa membocorkan nama env var:** `/api/ai-status` (monica,
+5 Okt). Versi pertamanya menulis `NINE_ROUTER_API_KEY` di pesannya — ketahuan
+karena ada uji khusus yang men-`grep` nama variabel di seluruh JSON balasan,
+dan uji itu gagal. Sudah diperbaiki. **Kalau kamu menambah pesan gagal baru
+dari server, jalankan uji yang sama.**
+
+---
+
+## 1. Chip kategori — SELESAI (5 Okt)
+
+**Status:** ✅ **selesai.** Ditahan di versi sebelumnya, dikerjakan 5 Okt.
+
+**Ternyata BUKAN "belum ada endpoint"** seperti tertulis di versi catatan
+sebelumnya. `/api/categories` sudah ada dan mengembalikan 11 kategori;
+komentar di `app.js:445` sudah **basi** dan membohongi tiga sesi. Yang
+sebenarnya terjadi:
+
+```
+state.categories = []   ← dideklarasikan kosong
+grep "state.categories ="  → NOL pengisian, dari hari pertama
+grep "api/categories"      → NOL pemanggilan dari app.js
+```
+
+Akibatnya chip kategori **tidak pernah muncul** di layar Catat (jatuh ke kolom
+teks bebas, sehingga salah ketik lolos ke `/api/save`), dan pemilih kategori di
+form edit hanya menulis *"Tidak ada pilihan kategori"*.
+
+**Perbaikan:** `refresh()` mengisi `state.categories` dari `/api/categories`,
+persis pola `state.accounts` di atasnya, **sebelum** `renderDaftar()` dipanggil
+(kalau sesudah, chip di halaman Daftar tetap kosong). Komentar basi diperbaiki.
+
+**Bukti di browser** (server uji di salinan `/tmp`, 32 transaksi):
+
+| Keadaan | Chip yang tergambar |
+|---|---|
+| `state.categories = []` (kode lama) | **0 chip** + teks "Kategori sekarang: Makan" |
+| terisi (kode baru) | **8**: Makan, Transport, Belanja, Hiburan, Tagihan, Kesehatan, Pendidikan, Lainnya |
+| pilih *Pemasukan* | **3**: Gaji, Bonus, Lainnya |
+| pilih *Pindah akun* | "Pindah akun tidak memakai kategori." |
+
+Log server juga membuktikan: `GET /api/categories → 200` muncul di **setiap**
+muat halaman. Sebelumnya baris itu tidak pernah ada.
+
+---
+
+## 2. Chip kategori dari `/api/categories` — DITAHAN
 
 **Status:** ⏸️ **ditahan** — bukan karena halangan teknis, tapi karena Deny
 menghentikan pengembangan. `/api/categories` sudah ada (11 kategori) dan bisa
 langsung jadi chip, sama seperti chip akun yang sudah jalan.
 
-**Sumber sekarang:** `state.categories` yang diisi dari `/api/summary`.
-Berfungsi. Menggantinya menghilangkan sumber ganda, tapi tidak memperbaiki apa
-pun yang rusak.
+**Sumber sekarang:** `state.categories` **sudah diisi dari `/api/categories`**
+(§1, dikerjakan 5 Okt). Menggantinya dari `/api/summary` menghilangkan sumber
+ganda, tapi tidak memperbaiki apa pun yang rusak.
 
 **Kapan dikerjakan:** kalau ada bug yang menyentuh chip kategori, atau kalau
 Deny memintanya. Itu saat yang tepat.
 
 ---
 
-## 2. `transfer` belum bisa diedit dari panel
+## 3. `transfer` belum bisa diedit dari panel
 
 **Status:** ⏸️ sengaja ditahan sejak awal. Kalau `flow_type` diubah ke
 `transfer`, tombol Simpan mati dengan keterangan bahwa akun tujuan belum ada di
@@ -56,7 +185,7 @@ setengah jadi.** Jadi ini butuh kolom akun tujuan di form edit dulu.
 
 ---
 
-## 3. Perbandingan naik/turun yang belum teruji (bukan bug)
+## 6. Perbandingan naik/turun yang belum teruji (bukan bug)
 
 **Status:** ⏸️ menunggu **keadaan data**, bukan pekerjaan.
 
@@ -74,32 +203,10 @@ akan terbuka sendiri begitu ada bulan kedua:
 
 ---
 
-## 4. TEMUAN: pola "gagal" yang terbaca seperti "data kosong" — perlu disisir
+## 7. TEMUAN lama — sudah dilebur ke §4 di atas
 
-**Status:** ⏸️ **temuan, bukan tugas.** Satu sudah diperbaiki; sisanya belum
-diperiksa.
-
-Ini ketemu saat menguji jalur gagal grafik tren: ketika `/api/trend` mati,
-layar berkata **"Belum ada data 6 bulan terakhir — Catat transaksi dulu"**.
-Itu **menyalahkan Deny untuk kegagalan koneksi** — dan kalau dia percaya, dia
-akan mengira datanya hilang lalu mencatat ulang transaksi yang sudah ada.
-
-Sudah diperbaiki di `drawChart()`: sekarang membedakan
-*"tidak ada transaksi"* dari *"gagal membaca"*.
-
-**Yang belum disisir:** mungkin ada tempat lain di `app.js` dengan pola sama —
-pesan gagal yang terbaca seperti pesan data-kosong. Kandidat yang perlu
-diperiksa kalau nanti ada bug serius:
-
-- `renderSisaBulanLalu()` — pembacaan gagal sudah ditangani terpisah, **tapi
-  belum diuji dengan `/api/analysis` benar-benar mati**
-- `renderTargetTabungan()` — belum diperiksa apakah bedakan gagal vs kosong
-- `renderAkun()` — sudah ada penanganan terpisah, terverifikasi
-- kartu saran & narasi di halaman Analisa — belum diperiksa
-
-**Prinsipnya:** kegagalan tidak boleh menyamar jadi keadaan data. Sejalan
-dengan aturan `ada_data: false` — jangan tampilkan "nol" untuk sesuatu yang
-sebenarnya "tidak diketahui".
+*(Duplikat ini sudah tidak berlaku; isinya ada di §4 "pola gagal yang terbaca
+seperti data kosong".)*
 
 ---
 

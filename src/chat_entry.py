@@ -95,9 +95,13 @@ def parse(text):
             try:
                 with urllib.request.urlopen(req, timeout=model_config.TIMEOUT) as r:
                     raw = r.read().decode()
-            except Exception:
+            except Exception as e2:
+                # `e2` WAJIB ditangkap di sini: tanpa itu, `e` di bawah merujuk
+                # kegagalan model UTAMA — sebab kegagalan CADANGAN hilang, dan
+                # itu justru informasi yang paling dibutuhkan saat mendiagnosa.
                 raise RuntimeError(
-                    "Model utama dan cadangan dua-duanya gagal. Terakhir: %s" % e)
+                    "Model utama dan cadangan dua-duanya gagal. "
+                    "Utama: %s · Cadangan: %s" % (e, e2))
         else:
             raise
 

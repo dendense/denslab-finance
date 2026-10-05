@@ -204,6 +204,37 @@
   .lencana-debt_payment { @apply bg-(--color-debt-bg)     text-(--color-debt); }
   .lencana-transfer   { @apply bg-(--color-transfer-bg)   text-(--color-transfer); }
 
+  /* ── Panel cek jaringan AI (halaman Catat) ────────────────────────────
+     Ditulis sebagai kelas di sini, BUKAN sebagai kelas Tailwind lepas di
+     app.js. Alasannya terukur: `bg-(--color-*-bg)` yang ditulis lewat
+     el('div', 'bg-(--color-income-bg)') di app.js TIDAK menghasilkan CSS —
+     Tailwind 4 tidak menemukan rujukan variabelnya dari berkas JS, dan
+     `grep 'bg-(--color-' tailwind.css` kosong. Akibatnya keempat keadaan
+     jatuh ke latar bawaan .kartu (terukur: semuanya
+     `oklch(0.21 0.034 264.665)`), dan keadaan "belum" jadi tidak terbaca
+     (kontras 1.00). Pola @layer seperti .lencana-* di atas terbukti bekerja.
+     Latar + tepi di sini; warnanya SENGAJA dibuat lebih redup daripada
+     .lencana supaya panel ini tidak lebih mencolok daripada isi chat. */
+  .ai-panel          { @apply rounded-xl border px-4 py-3; }
+  .ai-ok             { @apply bg-(--color-income-bg)   border-(--color-income); }
+  .ai-lambat         { @apply bg-(--color-debt-bg)     border-(--color-debt); }
+  .ai-gagal          { @apply bg-(--color-expense-bg)  border-(--color-expense); }
+  .ai-belum          { @apply bg-(--color-transfer-bg) border-(--color-transfer); }
+
+  .ai-judul          { @apply text-sm font-semibold; }
+  .ai-judul-ok       { @apply text-(--color-income); }
+  .ai-judul-lambat   { @apply text-(--color-debt); }
+  .ai-judul-gagal    { @apply text-(--color-expense); }
+  .ai-judul-belum    { @apply text-(--color-transfer); }
+
+  .ai-pesan          { @apply mt-2 mb-0 text-[13px] leading-snug; }
+  .ai-rinci          { @apply mt-2 mb-0 text-[11px] leading-snug
+                              text-gray-500 dark:text-gray-400; }
+  /* Titik penanda: warnanya mengikuti teks judul, jadi tidak perlu kelas
+     sendiri per keadaan. aria-hidden — keadaannya sudah dibacakan judulnya. */
+  .ai-titik          { @apply inline-block h-2.5 w-2.5 shrink-0 rounded-full
+                              border-2; }
+
   /* ── Navigasi atas ─────────────────────────────────────────────────── */
   .navtab {
     @apply flex flex-col items-center justify-center gap-0.5 min-w-tap min-h-tap

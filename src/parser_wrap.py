@@ -142,12 +142,20 @@ def parse_kontrak(text):
         import chat_entry
         hasil = chat_entry.parse(text)
     except RuntimeError as e:
-        # kunci API hilang atau model tidak membalas
+        # Kunci API hilang, kuota habis, atau model tidak membalas. `sebab`
+        # (teks asli dari Python) TIDAK dikirim ke UI: nama env var dan pesan
+        # pustaka tidak bisa ditindaklanjuti Deny, dan menampilkannya membuat
+        # layar terbaca seperti rusak. Sebabnya dicatat di server untuk
+        # diagnosa; ke Deny cukup apa yang perlu dia lakukan.
+        print("[parser] uraian gagal: %s" % e, flush=True)
         return {"ok": False, "error": "model_tidak_membalas",
-                "message": "Model tidak bisa dihubungi: %s" % e}
+                "message": "Catat pintar sedang tidak bisa dipakai — model "
+                           "tidak menjawab. Kamu tetap bisa mengisi manual."}
     except Exception as e:
+        print("[parser] gagal urai: %s" % e, flush=True)
         return {"ok": False, "error": "gagal_parse",
-                "message": "Gagal mengurai pesan: %s" % e}
+                "message": "Kalimat itu gagal diuraikan. Coba tulis lebih "
+                           "sederhana, atau isi manual."}
 
     txs = hasil.get("transactions") or []
     question = hasil.get("question")

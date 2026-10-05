@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>finance — panel</title>
 
+<!-- Ikon tab, ditulis SEBAGAI DATA-URI — bukan berkas .ico/.svg terpisah.
+     Dua alasan: (1) server hanya mengenali .html/.css/.js dan mengirim sisanya
+     sebagai text/plain, jadi berkas ikon akan ditolak browser; (2) tanpa ini
+     browser meminta /favicon.ico dan server membalas 404 di SETIAP muat
+     halaman — terlihat di log. Emoji dipakai karena seluruh panel sudah
+     memakai emoji sebagai ikon (🐴 di judul, ◧ ＋ ≡ ◈ ◔ di navbar). -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐴</text></svg>">
+
 <!-- WAJIB paling atas, SEBELUM <link> stylesheet. Kalau ditaruh sesudahnya,
      CSS sudah diterapkan lebih dulu dan mode gelap berkedip putih sesaat.
      Baca tema tersimpan sebelum halaman digambar.
@@ -232,6 +240,11 @@
   <section id="view-catat" class="view masuk" aria-labelledby="h-catat" hidden>
     <h2 id="h-catat" class="sr-only">Catat transaksi</h2>
     <div class="mx-auto flex max-w-3xl flex-col">
+      <!-- Panel cek jaringan AI. Di ATAS panel chat, selalu terbuka (bukan
+           dilipat): Deny memintanya langsung terlihat. Isinya diisi
+           renderStatusAI() di app.js. -->
+      <div id="ai-host" class="pt-4"></div>
+
       <div class="flex flex-col gap-4 py-4" id="chatlog"
            aria-live="polite" aria-relevant="additions"></div>
 

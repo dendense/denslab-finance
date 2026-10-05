@@ -442,7 +442,7 @@ const state = {
   month: null,        /* 'YYYY-MM' dari server pada load pertama */
   summary: null,
   accounts: [],
-  categories: [],     /* kosong: endpoint kategori belum ada di server (lihat laporan) */
+  categories: [],     /* diisi dari /api/categories di refresh() — JANGAN biarkan kosong */
   tx: [],
   parsedAny: false,
   tab: 'home',
@@ -2592,13 +2592,19 @@ async function sendChat(text) {
   icon.textContent = old;
 
   if (!res.ok) {
-    const b = chatBubble('Uraian gagal: ' + (res.message || res.error
-      || 'sebab tidak diketahui'), 'error');
-    const btn = el('button', 'tombol tombol-hantu tombol-kecil', 'Isi manual');
+    /* Dua elemen terpisah, BUKAN appendChild ke gelembung teks: `chatBubble`
+       mengisi textContent, jadi tombol yang di-append ke sana menempel
+       langsung ke kalimatnya ("...environmentIsi manual"). Terukur di layar
+       sebelum diperbaiki. Wadah pembungkus menjaga keduanya tetap berjarak. */
+    const wadah = el('div', 'gelembung gelembung-error flex flex-col items-start');
+    wadah.appendChild(el('p', 'm-0', res.message || res.error
+      || 'sebab tidak diketahui'));
+    const btn = el('button', 'tombol tombol-hantu tombol-kecil mt-3', 'Isi manual');
     btn.type = 'button';
-    btn.style.marginTop = '12px';
     btn.addEventListener('click', () => openManual());
-    b.appendChild(btn);
+    wadah.appendChild(btn);
+    $('chatlog').appendChild(wadah);
+    scrollChat();
     return;
   }
   const d = res.draft || {};
@@ -2651,6 +2657,9 @@ function showTab(name) {
     else t.removeAttribute('aria-current');
   });
   if (name === 'catat') {
+    /* Panel cek AI diisi saat tab Catat dibuka — pola yang sama dengan
+       halaman Analisa: tidak perlu diperiksa kalau tabnya belum dilihat. */
+    periksaStatusAI(false);
     setTimeout(() => $('chat-input').focus({ preventScroll: true }), 60);
   }
   /* Tab yang sama ditekan lagi: jangan lompat ke atas, Deny mungkin sedang
@@ -2684,6 +2693,23 @@ async function refresh() {
     state.accounts = ja.items || [];
   } catch (e) {
     state.accounts = [];
+  }
+  /* state.categories WAJIB dari /api/categories, bukan ditebak.
+     Sejak panel ini dibuat, `state.categories` diisi `[]` dan TIDAK PERNAH
+     diisi ulang — padahal /api/categories sudah ada dan mengembalikan 11
+     kategori. Akibatnya chip kategori tidak pernah tampil di layar Catat
+     (jatuh ke kolom teks bebas, sehingga salah ketik lolos ke /api/save),
+     dan pemilih kategori di form edit hanya menulis "Tidak ada pilihan
+     kategori". Diambil di sini — sebelum renderDaftar() di bawah — supaya
+     semua pemakainya melihat daftar yang sama.
+     Kalau endpointnya mati, daftarnya kosong dan pemakainya menampilkan
+     pesan jujur; TIDAK diisi tebakan. */
+  try {
+    const rc = await fetchSesi('/api/categories', { cache: 'no-store' });
+    const jc = await rc.json();
+    state.categories = jc.items || [];
+  } catch (e) {
+    state.categories = [];
   }
   $('month-label').textContent = monthLabel(s.month);
 
@@ -2739,6 +2765,127 @@ async function refresh() {
        : `Belum ada data · ${monthLabel(s.month)}`);
 
   drawChart(await loadTrend(s.month));
+}
+
+/* ══ Panel cek jaringan AI (halaman Catat) ═════════════════════════════════
+   Menjawab satu pertanyaan: apakah catat pintar bisa dipakai sekarang?
+
+   TIGA ATURAN yang membentuk bentuk panel ini:
+
+   1. EMPAT keadaan, bukan tiga. "Belum diperiksa" TIDAK boleh hijau — itu
+      klaim sehat tanpa dasar, persis pola yang berkali-kali jadi bug di repo
+      ini (kegagalan menyamar jadi keadaan normal).
+   2. TIDAK ADA kolom URL/API key di sini, dan jangan ditambahkan. Kunci di UI
+      = kunci di browser = kunci ikut ke cadangan DB & mungkin ke repo publik.
+      Kunci hidup di env.sh di luar repo. Keputusan ini sudah ditolak sekali;
+      alasannya lengkap di requests/CATATAN-BELUM-SELESAI.md §5b.
+   3. Panel ini TIDAK memanggil model untuk sekadar cek lalu lintas. Setiap
+      panggilan membakar kuota Deny. Status dibaca dari endpoint ringan
+      /api/ai-status yang disediakan server (belum ada — lihat §5c). Selama
+      endpoint itu belum ada, panel jujur berkata "belum bisa diperiksa".
+*/
+const AI_HOST = () => $('ai-host');
+
+function renderStatusAI(w) {
+  const host = AI_HOST();
+  if (!host) return;
+  host.textContent = '';
+
+  /* `w` = { keadaan, judul, pesan, endpoint, model, latensi_ms, kode }
+     keadaan: 'ok' | 'lambat' | 'gagal' | 'belum'
+
+     Kelasnya (.ai-panel/.ai-ok/…) ada di src.css, BUKAN ditulis sebagai
+     kelas Tailwind lepas di sini: `bg-(--color-…-bg)` yang ditulis dari JS
+     tidak menghasilkan CSS (diukur — lihat catatan di src.css). */
+  const kode = w.keadaan || 'belum';
+
+  const kartu = el('div', 'ai-panel ai-' + kode);
+
+  /* Baris pertama: titik warna + judul + tombol periksa ulang.
+     Keadaannya ditulis sebagai TEKS juga, bukan hanya warna — kalau hanya
+     warna, panel ini tidak terbaca oleh yang buta warna. */
+  const baris = el('div', 'flex items-center gap-2');
+  const titik = el('span', 'ai-titik ai-judul-' + kode);
+  titik.setAttribute('aria-hidden', 'true');
+  baris.appendChild(titik);
+  baris.appendChild(el('span', 'flex-1 ai-judul ai-judul-' + kode, w.judul));
+
+  const btn = el('button', 'tombol tombol-hantu tombol-kecil shrink-0', 'Periksa');
+  btn.type = 'button';
+  btn.addEventListener('click', () => periksaStatusAI(true));
+  baris.appendChild(btn);
+  kartu.appendChild(baris);
+
+  if (w.pesan) {
+    kartu.appendChild(el('p', 'ai-pesan ai-judul-' + kode, w.pesan));
+  }
+
+  /* Rincian teknis — kecil dan redup: berguna saat ada masalah, tidak
+     mengganggu saat semuanya normal. */
+  const rinci = [];
+  if (w.endpoint) rinci.push('Endpoint: ' + w.endpoint);
+  if (w.model) rinci.push('Model: ' + w.model);
+  if (typeof w.latensi_ms === 'number') rinci.push('Balas dalam ' + w.latensi_ms + ' ms');
+  if (rinci.length) {
+    const p = el('p', 'ai-rinci');
+    rinci.forEach((r, i) => {
+      if (i) p.appendChild(document.createTextNode(' · '));
+      p.appendChild(document.createTextNode(r));
+    });
+    kartu.appendChild(p);
+  }
+
+  host.appendChild(kartu);
+}
+
+let SEDANG_CEK_AI = false;
+async function periksaStatusAI(manual) {
+  const host = AI_HOST();
+  if (!host || SEDANG_CEK_AI) return;
+
+  /* Keadaan awal saat diperiksa: 'belum' — BUKAN hijau. Panel tidak boleh
+     terlihat sehat hanya karena pemeriksaan belum selesai. */
+  if (manual) {
+    SEDANG_CEK_AI = true;
+    try {
+      const r = await fetchSesi(API + '/ai-status', { cache: 'no-store' });
+      if (r.status === 404) {
+        /* Endpoint belum ada di server. Katakan apa adanya — jangan
+           memakai /api/parse sebagai pengganti, itu membakar kuota Deny
+           setiap kali halaman dimuat. */
+        renderStatusAI({ keadaan: 'belum',
+          judul: 'Belum bisa diperiksa',
+          pesan: 'Server belum punya endpoint /api/ai-status, jadi panel ini '
+               + 'belum tahu keadaan AI-nya. Ini bukan berarti AI-nya mati. '
+               + 'Catat pintar tetap dicoba saat kamu mengirim kalimat.' });
+        return;
+      }
+      const j = await r.json();
+      const d = j || {};
+      /* Server yang menentukan keadaannya; UI hanya menampilkan. Sama seperti
+         aturan angka: UI tidak menghitung, UI tidak menebak. */
+      renderStatusAI({
+        keadaan: d.keadaan || (d.ok ? 'ok' : 'gagal'),
+        judul: d.judul || (d.ok ? 'AI siap dipakai' : 'AI tidak bisa dipakai'),
+        pesan: d.pesan || '',
+        endpoint: d.endpoint || null,
+        model: d.model || null,
+        latensi_ms: typeof d.latensi_ms === 'number' ? d.latensi_ms : null,
+      });
+    } catch (e) {
+      renderStatusAI({ keadaan: 'gagal',
+        judul: 'Server tidak menjawab',
+        pesan: 'Panel tidak bisa membaca status AI karena server finance-nya '
+             + 'sendiri tidak menjawab. Coba lagi sebentar lagi.' });
+    } finally {
+      SEDANG_CEK_AI = false;
+    }
+    return;
+  }
+
+  /* Pemeriksaan otomatis saat halaman pertama dimuat: JANGAN memanggil model.
+     Hanya baca endpoint ringan; kalau belum ada, tampilkan 'belum'. */
+  periksaStatusAI(true);
 }
 
 /* ══ Tema: Terang · Gelap · Ikut sistem ═══════════════════════════════════
