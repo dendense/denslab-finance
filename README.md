@@ -61,12 +61,23 @@ Kolom catat bisa menebak kategori dari kalimatmu, tapi perlu satu endpoint AI
 yang kompatibel dengan OpenAI. Tanpa ini, **aplikasinya tetap jalan** — kamu
 cukup mengisi form secara manual.
 
-Konfigurasinya ada di `src/model_config.py`. Yang bisa diatur lewat variabel
-lingkungan hanya alamatnya:
+Konfigurasinya ada di `src/model_config.py`. Bawaannya API kenari.id:
+
+```bash
+# tidak perlu diatur — ini bawaannya
+# https://kenari.id/v1/chat/completions
+```
+
+Kalau ingin lewat router lokal (mis. omniroute), timpa alamatnya:
 
 ```bash
 export NINE_ROUTER_BASE="http://localhost:20128/v1/chat/completions"
 ```
+
+Perlu diperhatikan: **nama model di kenari.id tidak memakai awalan `kenari/`.**
+Awalan itu konvensi router omniroute. Lewat kenari.id langsung, nama modelnya
+`deepseek-v4-1-flash` — memakai `kenari/deepseek-v4-1-flash` menghasilkan
+HTTP 400 `no price for model`.
 
 Untuk mengganti model, ubah `MODEL` di `src/model_config.py`, lalu **uji
 akurasinya** sebelum dipakai mencatat:

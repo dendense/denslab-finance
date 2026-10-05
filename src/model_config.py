@@ -25,11 +25,17 @@ import os
 # Satu-satunya kasus yang gagal di semua model: "top up gopay 100000" —
 # kalimatnya memang ambigu (pindah ke saldo, atau pengeluaran?). Bukan cacat
 # model; ini alasan layar konfirmasi punya chip koreksi flow_type.
-MODEL = "kenari/deepseek-v4-1-flash"
+# PENTING: nama model TIDAK memakai awalan "kenari/". Awalan itu konvensi
+# router omniroute, bukan nama asli di API kenari.id. Lewat kenari.id langsung,
+# modelnya cuma "deepseek-v4-1-flash" — memakai awalan menghasilkan
+# HTTP 400 "no price for model 'kenari/deepseek-v4-1-flash'".
+MODEL = "deepseek-v4-1-flash"
 
 # Cadangan kalau model utama mati. Yang gratis, supaya pencatatan tidak
 # pernah benar-benar berhenti walaupun kuota habis.
-MODEL_CADANGAN = "kenari/agnes-2-0-flash:free"
+MODEL_CADANGAN = "agnes-2-0-flash:free"
 
-BASE = os.environ.get("NINE_ROUTER_BASE", "http://localhost:20128/v1/chat/completions")
+# Bawaan: kenari.id langsung. Tidak perlu omniroute.
+# Kalau ingin lewat router lokal, set NINE_ROUTER_BASE=http://localhost:20128/v1/chat/completions
+BASE = os.environ.get("NINE_ROUTER_BASE", "https://kenari.id/v1/chat/completions")
 TIMEOUT = 90

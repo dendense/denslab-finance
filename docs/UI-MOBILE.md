@@ -76,3 +76,59 @@ memungkinkan cookie httpOnly.
   perlu refactor; jangan implementasi temanya dulu.
 - Offline: belum dikerjakan. Kalau nanti Deny sering mencatat tanpa sinyal, ini perlu
   dibahas serius — bukan sekadar "tambah service worker".
+
+---
+
+## Aturan berkas frontend (4 Okt 2026)
+
+Dipindah dari surat `monica-ke-yuki-2026-10-03-aturan-repo-publik.md` supaya
+tidak hilang saat suratnya diarsipkan. **Repo ini publik** — aturan ini berlaku
+untuk siapa pun yang mengubah `web/`.
+
+### `web/tailwind.css` WAJIB ikut git, walaupun hasil build
+
+`web/index.html` memuat `<link rel="stylesheet" href="/tailwind.css">`. Kalau
+berkas itu tidak ikut repo, orang yang meng-clone mendapat panel **tanpa gaya
+sama sekali** kecuali dia memasang Node.js lebih dulu dan menjalankan build.
+
+**Pernah terjadi:** `web/.gitignore` mengabaikan `tailwind.css`, sehingga
+`src.css` terlacak tapi hasil buildnya tidak. Terbukti dengan meng-clone repo
+dan `curl` — `/tailwind.css` balas `302`, **0 byte**, sementara di repo asli
+39.470 byte.
+
+**Setiap kali mengubah `src.css` atau class Tailwind:**
+
+```bash
+cd web && npm run css
+git add src.css tailwind.css      # keduanya, selalu berpasangan
+```
+
+### Uji yang menyentuh database WAJIB pakai `FINANCE_DATA`
+
+Tanpa itu, uji **menulis ke database keuangan Deny**. Data hidup di luar repo
+(`../finance-pribadi/`), dan `src/db.py` punya pengaman: folder yang berisi
+`finance.db` tapi tanpa penanda `.finance-data` akan **ditolak** server.
+
+```bash
+cp "${FINANCE_DATA:-$HOME/Documents/AI/finance-pribadi}/finance.db" /tmp/uji/data/finance.db
+touch /tmp/uji/data/.finance-data
+FINANCE_DATA=/tmp/uji/data python3 src/server.py --port 8795
+```
+
+Prosedur lengkapnya (termasuk cara memasang password uji di salinan) ada di
+`web/README.md`, bagian "Cara menguji alur tulis tanpa menyentuh database Deny".
+
+### Jangan tulis password di dokumen mana pun
+
+Walau cuma password uji. Dokumen di folder ini dibaca orang lain nanti, dan
+password lebih baik tidak punya jejak tertulis.
+
+### Kegagalan tidak boleh menyamar jadi keadaan data
+
+Kalau sebuah endpoint gagal dihubungi, pesannya harus bilang **gagal** — bukan
+"belum ada data". Contoh yang pernah salah: grafik tren berkata *"Belum ada data
+6 bulan terakhir, catat transaksi dulu"* padahal `/api/trend`-nya yang mati.
+Itu menyalahkan Deny untuk kegagalan koneksi.
+
+Prinsipnya sejalan dengan `ada_data: false`: jangan tampilkan "nol" untuk
+sesuatu yang sebenarnya "tidak diketahui".

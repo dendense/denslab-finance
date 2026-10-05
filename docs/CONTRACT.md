@@ -633,3 +633,50 @@ tidak terpakai.
 **Catatan penting:** karena September belum punya data, **semua saran bulan
 ini berjenis `tanpa_pembanding` dengan `potensi_hemat: null`**. Tampilannya
 adalah daftar kategori tanpa angka hemat — dan itu benar, bukan kerusakan.
+
+---
+
+## 16. "Bisa ditabung" = `sisa_bebas`, BUKAN `sisa_kas` (4 Okt 2026)
+
+Aturan ini **wajib** dipatuhi UI, dan sebelumnya hanya hidup di surat antar-agent
+(`monica-ke-yuki-2026-10-03-analisa-bulanan.md`). Dipindah ke sini supaya tidak
+hilang saat suratnya diarsipkan.
+
+`GET /api/analysis?month=` mengirim **dua** angka sisa, dan keduanya berbeda
+jauh — terukur di Oktober 2026: **selisih Rp 1.966.196**.
+
+| Field | Arti | Dipakai untuk |
+|---|---|---|
+| `angka.sisa_bebas` | uang masuk dikurangi **pengeluaran sungguhan** | **angka "bisa ditabung"** |
+| `angka.sisa_kas` | uang masuk dikurangi **semua** yang keluar | pembanding saja |
+
+**Kenapa `sisa_kas` menyesatkan:** ia ikut mengurangi pelunasan utang dan
+talangan, padahal uang itu **sudah tidak ada** — bukan berarti masih bisa
+dihemat. Menampilkan `sisa_kas` sebagai "bisa ditabung" membuat Deny mengira
+ada uang yang sebenarnya sudah terpakai.
+
+**Kalau UI menampilkan angka "bisa ditabung", ambil dari `sisa_bebas`.** Kalau
+ragu mana yang dipakai, tanya dulu — jangan pilih yang lebih besar.
+
+### Peringatan kelengkapan ditampilkan DI ATAS angka
+
+`kelengkapan.peringatan` **wajib** tampil **di atas** angka sisa, bukan di
+bawahnya. Angkanya tetap ditampilkan — yang perlu dilakukan adalah menyatakan
+dasar perhitungannya, bukan menyembunyikan angkanya.
+
+Tanpa itu, "sisa bebas Rp 7.630.550" yang dihitung dari 3 hari data terlihat
+seperti uang yang benar-benar bisa ditabung.
+
+### `potensi_hemat: null` ditampilkan TANPA angka
+
+Jangan pernah menulis "Rp 0" untuk `potensi_hemat: null`. Nol dan "tidak
+diketahui" adalah dua hal berbeda.
+
+`asumsi` **wajib** ditampilkan, bukan opsional — angka hemat tanpa penjelasan
+tidak bisa dipercaya. Kalau ruang kurang, tampilkan lebih kecil; jangan dihapus.
+
+### Tombol "Buat analisa" mati kalau `boleh_dianalisa: false`
+
+Bulan berjalan tidak boleh dianalisa (kesimpulannya bisa terbalik keesokan
+hari). Tombolnya **mati**, dan alasannya **ditulis di layar** — jangan biarkan
+bisa ditekan padahal pasti gagal.

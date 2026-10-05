@@ -553,9 +553,19 @@ function renderStats(s) {
     + rupiah(f.net) + '.';
 }
 
-function renderRecent(items) {
+function renderRecent(items, gagal) {
   const host = $('recent-host');
   host.textContent = '';
+  /* Sama seperti renderDaftar: "gagal memuat" bukan "belum ada transaksi".
+     Tanpa pembedaan ini, kegagalan endpoint transaksi tampil sebagai daftar
+     kosong tanpa penjelasan — dan Deny mengira catatannya hilang. */
+  if (gagal) {
+    host.appendChild(el('p', 'm-0 rounded-xl border border-dashed '
+      + 'border-gray-300 px-4 py-3 text-sm text-gray-500 dark:text-gray-400',
+      'Tidak bisa memuat transaksi terakhir. Datamu tidak terpengaruh — '
+      + 'muat ulang halaman.'));
+    return;
+  }
   const list = el('ul', 'm-0 list-none p-0');
   items.slice(0, 6).forEach((t) => list.appendChild(txRow(t, true)));
   host.appendChild(list);
@@ -566,22 +576,53 @@ function renderRecent(items) {
  * TIDAK digambar sebagai nol — garisnya diputus dan titiknya kosong.
  */
 async function loadTrend(curMonth) {
-  const months = [];
-  for (let i = 5; i >= 0; i--) months.push(addMonths(curMonth, -i));
-  /* bulan yang sudah pernah dibaca tidak diambil ulang: membuka layar yang sama
-     dua kali tidak boleh menghasilkan enam request API lagi. */
-  const results = await Promise.all(months.map((m) =>
-    apiGet('/summary?month=' + m).catch(() => null)
-  ));
-  return months.map((m, i) => {
-    const s = results[i];
-    if (!s) return { month: m, state: 'error' };
-    if (!s.ada_data) return { month: m, state: 'kosong' };
+  /* SATU request menggantikan ENAM. Sebelumnya fungsi ini memanggil
+     /api/summary enam kali berurutan (satu per bulan) — di HP dengan sinyal
+     lemah itu terasa, dan enam respons yang harus cocok satu sama lain.
+
+     /api/trend sudah ada sejak lama dan tidak kupakai sampai sekarang.
+
+     Yang TIDAK berubah: bentuk keluaran fungsi ini. drawChart() tetap menerima
+     {month, state, net_real, expense_real, total_in} seperti sebelumnya, jadi
+     gambarannya tidak perlu disentuh sama sekali — dan itu disengaja, karena
+     grafiknya sudah teruji.
+
+     Bulan kosong: /api/trend mengirim `ada_data: false` dan total_in = null.
+     Itu dipetakan ke state 'kosong' seperti sebelumnya, BUKAN ke 0 — bulan
+     tanpa transaksi tidak boleh digambar sebagai batang bernilai nol.
+
+     Diverifikasi lebih dulu dengan pembanding angka (/tmp/banding-tren.py):
+     empat field — total_in, total_out, net_real, expense_real — dibandingkan
+     per bulan terhadap sumber lama, dan hasilnya identik di keenam bulan.
+     Dijalankan SEBELUM perubahan, dan dijalankan LAGI sesudahnya. */
+  const bulan = [];
+  for (let i = 5; i >= 0; i--) bulan.push(addMonths(curMonth, -i));
+
+  let d;
+  try {
+    d = await apiGet('/trend?months=6');
+  } catch (e) {
+    /* Kalau endpointnya tidak bisa dihubungi, tandai SEMUA bulan sebagai
+       'error' — bukan 'kosong'. Bedanya penting: 'kosong' berarti "tidak ada
+       transaksi", dan itu klaim tentang data Deny yang tidak boleh dibuat
+       kalau yang sebenarnya terjadi adalah koneksi gagal. */
+    return bulan.map((m) => ({ month: m, state: 'error' }));
+  }
+
+  const perBulan = {};
+  (d.items || []).forEach((x) => { perBulan[x.month] = x; });
+
+  return bulan.map((m) => {
+    const x = perBulan[m];
+    /* Bulan yang tidak disebut endpoint sama sekali: perlakukan sebagai
+       kosong, sama seperti /api/summary yang dulu mengembalikan ada_data:false.
+       Tapi kalau endpointnya menjawab `ada_data:false`, itu juga 'kosong'. */
+    if (!x || !x.ada_data) return { month: m, state: 'kosong' };
     return {
       month: m, state: 'ada',
-      net_real: s.flow.net_real,
-      expense_real: s.flow.expense_real,
-      total_in: s.flow.total_in,
+      net_real: x.net_real,
+      expense_real: x.expense_real,
+      total_in: x.total_in,
     };
   });
 }
@@ -596,6 +637,30 @@ function drawChart(series) {
   legend.textContent = '';
 
   if (!known.length) {
+    /* Bedakan "tidak ada data" dari "gagal membaca". Sebelumnya keduanya
+       menghasilkan kalimat yang sama — "Belum ada data 6 bulan terakhir,
+       catat transaksi dulu" — dan itu MENYALAHKAN Deny untuk kegagalan
+       koneksi. Kalau /api/trend tidak bisa dihubungi padahal dia punya 25
+       transaksi, pesan itu membuatnya mengira datanya kosong dan dia akan
+       mencatat ulang transaksi yang sudah ada.
+
+       Kegagalan adalah kegagalan; ia tidak boleh menyamar jadi keadaan data. */
+    const gagal = series.filter((p) => p.state === 'error').length;
+    if (gagal === series.length) {
+      note.textContent = 'Grafik tidak bisa dibaca: keenam bulan terakhir '
+        + 'gagal diambil dari server. Ini bukan berarti datanya kosong.';
+      const e = el('div', 'rounded-xl border border-dashed border-gray-300 px-4 py-5 text-center '
+        + 'dark:border-gray-700');
+      e.appendChild(el('p', 'm-0 mb-1 text-base font-semibold',
+        'Tidak bisa memuat grafik tren'));
+      e.appendChild(el('p', 'm-0 text-sm text-gray-500 dark:text-gray-400',
+        'Server tidak menjawab /api/trend. Datamu tidak terpengaruh — '
+        + 'muat ulang halaman, atau periksa apakah servernya masih jalan.'));
+      host.appendChild(e);
+      host.setAttribute('aria-label', 'Grafik tren gagal dimuat');
+      return;
+    }
+
     note.textContent = 'Belum ada satu bulan pun dengan transaksi tercatat dalam '
       + '6 bulan terakhir. Tidak ada yang bisa digambar — dan tidak digambar '
       + 'sebagai nol.';
@@ -1315,12 +1380,25 @@ function tanggalTerbuka(iso, jumlahBulanIni) {
   }
   return tanggalTerbukaBawaan(k, jumlahBulanIni);
 }
-function renderDaftar(items) {
+function renderDaftar(items, gagal) {
   const host = $('daftar-host');
   host.textContent = '';
-  $('daftar-count').textContent = items.length
-    ? items.length + ' transaksi · ' + monthLabel(state.month)
-    : '';
+  /* `gagal` dipisah dari "kosong": kalau endpoint transaksi tidak menjawab,
+     daftar ini kosong karena kegagalan — bukan karena Deny belum mencatat.
+     Menulis "belum ada data" di situ menyalahkannya untuk masalah koneksi. */
+  $('daftar-count').textContent = gagal
+    ? 'Tidak bisa memuat'
+    : (items.length ? items.length + ' transaksi · ' + monthLabel(state.month) : '');
+
+  if (gagal) {
+    const e = el('div', 'rounded-xl border border-dashed border-gray-300 px-5 py-6 text-center');
+    e.appendChild(el('p', 'm-0 mb-1 text-base font-semibold', 'Tidak bisa memuat transaksi'));
+    e.appendChild(el('p', 'm-0 text-sm text-gray-500 dark:text-gray-400',
+      'Server tidak menjawab daftar transaksi. Datamu tidak terpengaruh — '
+      + 'muat ulang halaman, atau periksa apakah servernya masih jalan.'));
+    host.appendChild(e);
+    return;
+  }
 
   if (!items.length) {
     const e = el('div', 'rounded-xl border border-dashed border-gray-300 px-5 py-6 text-center');
@@ -2638,17 +2716,27 @@ async function refresh() {
     emptyBox.hidden = true;
   }
 
+  /* Kegagalan BUKAN keadaan data.
+     Sebelumnya `catch` mengosongkan state.tx lalu panel menulis "Belum ada
+     data" — kalau endpoint transaksi yang gagal, Deny melihat kalimat yang
+     menyalahkan dirinya sendiri padahal dia punya 25 transaksi.
+     Pola yang sama dengan grafik tren (lihat loadTrend): "kosong" dan
+     "gagal dibaca" harus jadi dua keadaan yang berbeda. */
+  let gagalTx = false;
   try {
     const tx = await apiGet('/transactions?month=' + s.month + '&limit=400');
     state.tx = tx.items || [];
   } catch (e) {
     state.tx = [];
+    gagalTx = true;
   }
-  renderRecent(state.tx);
-  renderDaftar(state.tx);
-  $('daftar-count').textContent = hasData
-    ? `${state.tx.length} transaksi · ${monthLabel(s.month)}`
-    : `Belum ada data · ${monthLabel(s.month)}`;
+  renderRecent(state.tx, gagalTx);
+  renderDaftar(state.tx, gagalTx);
+  $('daftar-count').textContent = gagalTx
+    ? `Tidak bisa memuat · ${monthLabel(s.month)}`
+    : (hasData
+       ? `${state.tx.length} transaksi · ${monthLabel(s.month)}`
+       : `Belum ada data · ${monthLabel(s.month)}`);
 
   drawChart(await loadTrend(s.month));
 }

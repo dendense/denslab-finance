@@ -33,13 +33,45 @@ Permintaan yang tidak bisa dijawab penerimanya akan mengendap di sini.
 ## Kalau sudah selesai
 
 **Pindahkan berkasnya keluar dari folder ini** — jangan biarkan permintaan yang
-sudah dikerjakan bercampur dengan yang belum. Kalau sudah dijawab, ringkasannya
-masuk ke dokumen yang berlaku (`docs/CONTRACT.md`, `docs/SCHEMA.md`, atau `HANDOFF-*.md`),
-lalu berkasnya dihapus dari sini.
+sudah dikerjakan bercampur dengan yang belum.
 
-Kalau ditolak atau ditahan, tinggal di sini **dengan catatan alasannya
+**Aturan yang berlaku sejak 4 Okt 2026:** sebelum berkasnya dibuang,
+**pindahkan dulu isinya ke dokumen yang berlaku** (`docs/CONTRACT.md`,
+`docs/UI-MOBILE.md`, `docs/SCHEMA.md`, `README.md`, atau `web/README.md`) —
+lalu **hapus berkasnya**. Surat tidak perlu diarsipkan.
+
+Alasannya: surat hanya dibaca orang yang mencarinya, sementara aturan harus
+dibaca orang yang **butuh mengetahuinya tanpa tahu harus mencari ke mana**.
+Aturan yang hidupnya cuma di surat akan hilang saat suratnya dibuang — dan
+orang berikutnya mengulang kesalahannya.
+
+**Cara memeriksa sebelum menghapus** — pastikan setiap aturan kunci sudah ada
+di dokumen:
+
+```bash
+cd ~/Documents/AI/finance
+for k in sisa_bebas tailwind.css FINANCE_DATA finance-pribadi net_worth_akhir; do
+  c=$(grep -l "$k" docs/*.md README.md web/README.md 2>/dev/null | tr '\n' ' ')
+  printf "  %-18s -> %s\n" "$k" "${c:-TIDAK ADA}"
+done
+```
+
+Kalau ada yang "TIDAK ADA", **pindahkan dulu** — jangan hapus suratnya.
+
+Surat yang **ditolak atau ditahan** tinggal di sini **dengan catatan alasannya
 ditambahkan di bagian atas** — supaya tidak ada yang mengajukannya ulang tanpa
 tahu kenapa dulu tidak dikerjakan.
+
+## Isi folder ini (per 4 Okt 2026)
+
+```
+CATATAN-BELUM-SELESAI.md   daftar pekerjaan tertunda — hidup, terus diperbarui
+README.md                  berkas ini
+yuki-ke-monica-*.md        surat yang masih menunggu jawaban
+```
+
+Folder `docs/selesai/` **sudah dihapus** — isinya dilebur ke dokumen yang
+berlaku. Jangan buat lagi.
 
 ## Yang BUKAN isi folder ini
 

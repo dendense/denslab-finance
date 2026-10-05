@@ -738,15 +738,62 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
+
+    # Periksa dulu apakah sudah ada server yang jalan di port ini.
+    #
+    # KENAPA: kalau server dijalankan dari shortcut (ikon yang diklik), Deny bisa
+    # mengkliknya dua kali — atau mengkliknya padahal server dari sesi sebelumnya
+    # masih hidup. Tanpa pemeriksaan ini, yang muncul adalah traceback Python
+    # `OSError: [Errno 48] Address already in use`, dan itu tidak memberi tahu
+    # apa yang harus dilakukan.
+    #
+    # Yang benar: katakan bahwa panelnya SUDAH jalan, dan buka browser ke sana.
+    # Itu yang sebenarnya dia mau ketika mengklik ikonnya.
+    def sudah_ada_server(port):
+        """True kalau ada yang menjawab di port itu (server finance kita)."""
+        import urllib.request
+        try:
+            with urllib.request.urlopen(
+                    "http://127.0.0.1:%d/api/auth" % port, timeout=2) as r:
+                body = r.read().decode("utf-8", "ignore")
+            # Pastikan itu memang server finance, bukan aplikasi lain yang
+            # kebetulan memakai port yang sama.
+            return '"panjang_min_password"' in body
+        except Exception:
+            return False
+
+    if sudah_ada_server(args.port):
+        print("Panel finance SUDAH jalan di http://localhost:%d" % args.port)
+        print("Membuka browser ke sana. Tidak menjalankan server kedua.")
+        try:
+            import subprocess
+            subprocess.run(["open", "http://localhost:%d" % args.port],
+                           check=False)
+        except Exception:
+            pass
+        print("(Kalau ingin memaksa server baru: matikan yang lama dulu dengan")
+        print(" pkill -f 'src/server.py', lalu jalankan lagi.)")
+        return 0
+
     db.init_db()
-    srv = HTTPServer(("127.0.0.1", args.port), Handler)
+    try:
+        srv = HTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as e:
+        # Port terpakai aplikasi LAIN (bukan server finance kita). Katakan
+        # dengan jelas, jangan biarkan traceback Python yang membingungkan.
+        print("Gagal membuka port %d: %s" % (args.port, e))
+        print("Kemungkinan port itu dipakai aplikasi lain.")
+        print("Coba port lain, misalnya:  python3 src/server.py --port 8792")
+        return 1
+
     print("Server finance jalan di http://localhost:%d" % args.port)
     print("Database: %s" % db.DB_PATH)
-    print("Hanya bisa diakses dari Mac ini. Ctrl+C untuk berhenti.\n")
+    print("Hanya bisa diakses dari Mac ini. Ctrl+C untuk berhenti.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\nBerhenti.")
+        print("Berhenti.")
+    return 0
 
 
 if __name__ == "__main__":
