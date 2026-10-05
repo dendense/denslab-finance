@@ -680,3 +680,59 @@ tidak bisa dipercaya. Kalau ruang kurang, tampilkan lebih kecil; jangan dihapus.
 Bulan berjalan tidak boleh dianalisa (kesimpulannya bisa terbalik keesokan
 hari). Tombolnya **mati**, dan alasannya **ditulis di layar** — jangan biarkan
 bisa ditekan padahal pasti gagal.
+
+---
+
+## 17. `GET /api/ai-status` — cek AI tanpa membakar kuota (5 Okt 2026)
+
+Menjawab satu pertanyaan untuk panel di halaman Catat: **apakah catat pintar
+bisa dipakai sekarang?**
+
+```json
+{
+  "ok": true,
+  "model": "deepseek-v4-1-flash",
+  "endpoint": "https://kenari.id/v1/chat/completions",
+  "latensi_ms": 1887,
+  "keadaan": "ok",
+  "pesan": "AI siap dipakai."
+}
+```
+
+| Field | Aturan |
+|---|---|
+| `keadaan` | `ok` / `lambat` / `gagal` — **ambang "lambat" 5 detik HANYA di server.** Jangan hitung ulang di UI: dua ambang akan berbeda suatu hari, dan panel akan menampilkan kuning sementara server menganggapnya hijau |
+| `latensi_ms` | `null` kalau belum sempat dihubungi — **bukan `0`.** Nol berarti "balas dalam 0 ms", yang tidak mungkin; itu berbohong di layar |
+| `model` | Model yang **benar-benar menjawab**, bukan yang diminta — router bisa mengalihkan ke model cadangan |
+| `pesan` | **Tidak boleh memuat nama variabel environment.** UI tidak perlu tahu kunci hidup di mana |
+
+**Jangan pakai `/api/parse` untuk cek lalu lintas.** Setiap panggilan mengirim
+satu pesan ke model dan membakar kuota Deny. Itu sebabnya endpoint ini ada.
+
+**Kunci API tidak pernah dikembalikan.** `endpoint` hanya **informasi** — tidak
+bisa diubah dari UI. Kunci hidup di `env.sh` di luar repo; menaruhnya di UI
+berarti kunci ikut ke `finance.db`, ke berkas cadangan, dan suatu hari ke repo
+publik. Keputusan ini sudah ditolak sekali — alasannya di `docs/UI-MOBILE.md`.
+
+**Keadaan yang tidak dikenal jatuh ke `belum`, BUKAN `ok`.** Kalau server suatu
+hari mengirim keadaan baru, panelnya berkata "belum tahu" — bukan berpura-pura
+sehat. Prinsip yang sama dengan `ada_data: false`.
+
+### Kapan panel ini memanggil (keputusan Deny, 5 Okt)
+
+**Otomatis SEKALI per sesi browser**, bukan setiap tab Catat dibuka.
+
+```
+buka Catat pertama kali        -> 1 panggilan
+pindah tab 8x (Catat<->Beranda) -> tetap 1 panggilan
+tekan "Periksa"                -> panggilan paksa, memang disengaja
+```
+
+Penandanya di **`sessionStorage`, bukan `localStorage`** — harus hilang saat
+browser ditutup, supaya sesi berikutnya memeriksa lagi. Hasil terakhir juga
+diingat di sana: kalau tidak, panel menampilkan "belum diperiksa" padahal baru
+saja diperiksa, dan Deny memeriksa ulang tanpa perlu — makin banyak kuota
+terpakai, kebalikan dari maksudnya.
+
+**Kalau endpoint mati, tanda "sudah diperiksa" TIDAK dipasang** — percobaan
+berikutnya masih boleh jalan.

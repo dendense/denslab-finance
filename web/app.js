@@ -2791,13 +2791,18 @@ function renderStatusAI(w) {
   if (!host) return;
   host.textContent = '';
 
-  /* `w` = { keadaan, judul, pesan, endpoint, model, latensi_ms, kode }
+  /* `w` = { keadaan, judul, pesan, endpoint, model, latensi_ms }
      keadaan: 'ok' | 'lambat' | 'gagal' | 'belum'
 
      Kelasnya (.ai-panel/.ai-ok/…) ada di src.css, BUKAN ditulis sebagai
      kelas Tailwind lepas di sini: `bg-(--color-…-bg)` yang ditulis dari JS
      tidak menghasilkan CSS (diukur — lihat catatan di src.css). */
-  const kode = w.keadaan || 'belum';
+  /* Keadaan yang tidak dikenal jatuh ke 'belum', BUKAN ke 'ok'. Kalau server
+     suatu hari mengirim keadaan baru yang belum dikenal UI ini, panelnya
+     menampilkan "belum tahu" — bukan berpura-pura sehat. Kelas .ai-belum
+     selalu ada, jadi tampilannya juga tidak rusak tanpa gaya. */
+  const DIKENAL = ['ok', 'lambat', 'gagal', 'belum'];
+  const kode = DIKENAL.indexOf(w.keadaan) > -1 ? w.keadaan : 'belum';
 
   const kartu = el('div', 'ai-panel ai-' + kode);
 
@@ -2863,15 +2868,46 @@ async function periksaStatusAI(manual) {
       const j = await r.json();
       const d = j || {};
       /* Server yang menentukan keadaannya; UI hanya menampilkan. Sama seperti
-         aturan angka: UI tidak menghitung, UI tidak menebak. */
+         aturan angka: UI tidak menghitung, UI tidak menebak.
+
+         `judul` diambil dari `keadaan` yang DIKIRIM SERVER, bukan dari `d.ok`.
+         Salahnya kalau memakai `d.ok`: keadaan "lambat" juga ber-ok=true, jadi
+         panelnya menulis "AI siap dipakai" padahal pesannya sendiri bilang
+         "menjawab tapi lambat" — judul dan isi bertentangan (terukur di
+         layar). Server sudah mengirim `keadaan`; pakai itu. */
+      const kode = d.keadaan || (d.ok ? 'ok' : 'gagal');
+      const JUDUL = {
+        ok: 'AI siap dipakai',
+        lambat: 'AI menjawab lambat',
+        gagal: 'AI tidak bisa dipakai',
+        belum: 'Belum bisa diperiksa',
+      };
       renderStatusAI({
-        keadaan: d.keadaan || (d.ok ? 'ok' : 'gagal'),
-        judul: d.judul || (d.ok ? 'AI siap dipakai' : 'AI tidak bisa dipakai'),
+        keadaan: kode,
+        judul: d.judul || JUDUL[kode] || JUDUL.gagal,
         pesan: d.pesan || '',
         endpoint: d.endpoint || null,
         model: d.model || null,
         latensi_ms: typeof d.latensi_ms === 'number' ? d.latensi_ms : null,
       });
+      /* Simpan hasil pemeriksaan di sesi ini. Dua sebab:
+         (a) penanda 'aiDiperiksa' supaya tidak memanggil model lagi saat
+             Deny berpindah-pindah tab (keputusan Deny 5 Okt);
+         (b) hasilnya sendiri, supaya panel TIDAK lupa dan menampilkan
+             "belum diperiksa" padahal baru saja diperiksa — itu membingungkan
+             dan membuat Deny memeriksa ulang tanpa perlu (makin banyak kuota
+             terpakai, kebalikan dari maksudnya).
+         Kalau tanggalnya beda hari, hasil lama diabaikan. */
+      try {
+        sessionStorage.setItem('aiDiperiksa', '1');
+        sessionStorage.setItem('aiHasil', JSON.stringify({
+          tgl: new Date().toDateString(),
+          w: { keadaan: kode, judul: d.judul || JUDUL[kode] || JUDUL.gagal,
+               pesan: d.pesan || '', endpoint: d.endpoint || null,
+               model: d.model || null,
+               latensi_ms: typeof d.latensi_ms === 'number' ? d.latensi_ms : null }
+        }));
+      } catch (e) {}
     } catch (e) {
       renderStatusAI({ keadaan: 'gagal',
         judul: 'Server tidak menjawab',
@@ -2883,8 +2919,46 @@ async function periksaStatusAI(manual) {
     return;
   }
 
-  /* Pemeriksaan otomatis saat halaman pertama dimuat: JANGAN memanggil model.
-     Hanya baca endpoint ringan; kalau belum ada, tampilkan 'belum'. */
+  /* ── Pemeriksaan OTOMATIS: sekali per sesi browser ─────────────────────
+     Keputusan Deny (5 Okt): sekali per sesi, bukan setiap tab Catat dibuka.
+     Setiap panggilan mengirim satu pesan "ok" ke model dan MEMBAKAR KUOTA
+     Deny (monica §5), jadi berpindah-pindah tab tidak boleh memanggil ulang.
+
+     sessionStorage, bukan localStorage: tanda ini harus hilang saat tab
+     ditutup / browser ditutup, supaya sesi berikutnya memeriksa lagi. Itu
+     pola yang sama dengan "Sesi berakhir" di login.
+
+     Keadaan awal SEBELUM diperiksa: 'belum' — BUKAN hijau. */
+  let sudah;
+  try { sudah = sessionStorage.getItem('aiDiperiksa') === '1'; } catch (e) { sudah = false; }
+
+  if (sudah) {
+    /* Sudah diperiksa di sesi ini. Tampilkan HASILNYA lagi — bukan "belum",
+       karena panel yang lupa hasil yang baru saja didapat akan membuat Deny
+       memeriksa ulang tanpa perlu (justru menambah pemakaian kuota).
+       Kalau hasilnya tidak terbaca atau beda hari, baru tampilkan "belum". */
+    let hasil = null;
+    try {
+      const mentah = sessionStorage.getItem('aiHasil');
+      if (mentah) {
+        const h = JSON.parse(mentah);
+        if (h && h.tgl === new Date().toDateString() && h.w) hasil = h.w;
+      }
+    } catch (e) { hasil = null; }
+
+    if (hasil) {
+      renderStatusAI(hasil);
+      return;
+    }
+
+    renderStatusAI({ keadaan: 'belum',
+      judul: 'Belum diperiksa di sesi ini',
+      pesan: 'Panel ini memeriksa sekali per sesi supaya tidak memakai kuota '
+           + 'terus-menerus. Tekan "Periksa" kalau mau tahu keadaannya '
+           + 'sekarang. Catat pintar tetap dicoba saat kamu mengirim kalimat.' });
+    return;
+  }
+
   periksaStatusAI(true);
 }
 

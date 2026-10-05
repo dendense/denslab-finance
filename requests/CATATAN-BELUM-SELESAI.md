@@ -1,7 +1,7 @@
 # Catatan pekerjaan belum selesai — panel web finance
 
 **Dari:** yuki (FRONTEND)
-**Terakhir diperbarui:** 5 Okt 2026 (monica) — §5 endpoint selesai, §4 duplikat dibersihkan
+**Terakhir diperbarui:** 5 Okt 2026 (monica) — §5 selesai penuh & terverifikasi; §8 temuan kontras baru; nomor bagian dirapikan
 
 Berkas ini daftar hal yang **sudah diminta Deny tapi belum dikerjakan**, supaya
 sesi berikutnya tidak perlu menebak atau mengulang. Setiap butir menyebut apa
@@ -21,17 +21,22 @@ dikerjakan ulang.
 
 ---
 
-## 5. Panel cek jaringan AI di halaman Catat — SIAP (5 Okt)
+## 5. Panel cek jaringan AI di halaman Catat — SELESAI PENUH (5 Okt)
 
-**Status:** ✅ UI selesai · ✅ **endpoint selesai** (monica, 5 Okt —
-`requests/monica-ke-yuki-2026-10-05-endpoint-ai-status.md`). Tinggal
-menyambungkan.
+**Status:** ✅ **selesai dan terverifikasi.** Endpoint (monica) + UI (yuki),
+diuji dengan sesi login sungguhan. Keputusan Deny: diperiksa **otomatis sekali
+per sesi browser**, bukan setiap tab dibuka.
 
 `GET /api/ai-status` → `{ok, model, endpoint, latensi_ms, keadaan, pesan}`
 
 `keadaan` berisi `ok` / `lambat` / `gagal` — **ambang "lambat" (5 detik) ada di
-server, jangan diduplikasi di UI.** Panggil saat Deny menekan "Periksa", bukan
-setiap muat halaman: setiap panggilan membakar kuota.
+server, jangan diduplikasi di UI.** Keadaan yang tidak dikenal jatuh ke `belum`,
+bukan `ok`.
+
+**`keadaan` menangkap bug nyata:** versi pertama panel menyusun judul dari
+`d.ok`, dan karena `lambat` juga ber-`ok: true`, judulnya menulis "AI siap
+dipakai" sementara pesannya bilang "menjawab tapi lambat". Sudah diperbaiki —
+judul diambil dari `keadaan`.
 
 Deny minta panel di atas panel chat untuk melihat apakah AI-nya bisa dipakai.
 Deny awalnya minta **kolom URL + API key yang bisa diisi sendiri dari UI** —
@@ -207,6 +212,46 @@ akan terbuka sendiri begitu ada bulan kedua:
 
 *(Duplikat ini sudah tidak berlaku; isinya ada di §4 "pola gagal yang terbaca
 seperti data kosong".)*
+
+---
+
+## 8. Kontras `--color-expense` di atas `--color-expense-bg` = 4,44:1 (5 Okt)
+
+**Status:** ⏸️ **temuan, perlu keputusan Deny.** Bukan dari panel AI — tokennya
+sudah lama dipakai.
+
+Dihitung ulang oleh monica 5 Okt, rumus WCAG:
+
+```
+TERANG   #d92d20 di atas #fef3f2  ->  4,44:1   (perlu 4,50 untuk teks normal)
+GELAP    #ff9c93 di atas #3a1512  ->  8,05:1   (lulus)
+```
+
+**Tiga tempat memakainya**, jadi mengubah tokennya menyentuh ketiganya:
+
+| Pemakai | Di mana |
+|---|---|
+| `.lencana-expense` | lencana setiap baris **pengeluaran** — ratusan baris di layar |
+| `.gelembung-error` | gelembung pesan gagal di panel chat |
+| `.ai-gagal` | panel cek AI (baru, 5 Okt) |
+
+Yang membuatnya **kurang mendesak** dari kelihatannya: ini lencana **tebal**
+(bukan teks normal), dan WCAG memakai ambang **3:1** untuk teks besar/tebal —
+4,44 sudah lulus di sana. Yang memakai ambang 4,5 adalah `.gelembung-error` dan
+`.ai-gagal`, yang memang teks biasa.
+
+**Yang perlu diputuskan Deny**, dan masing-masing punya harga:
+
+1. **Turunkan `--color-expense`** (mis. ke `#b42318`) → kontras naik, tapi warna
+   "pengeluaran" di seluruh aplikasi jadi lebih gelap
+2. **Naikkan `--color-expense-bg`** → latar lencana jadi nyaris putih, batas
+   lencananya kabur
+3. **Biarkan** → 4,44 vs 4,50 praktis tak terlihat mata, tapi jadi satu-satunya
+   tempat yang gagal WCAG AA
+
+**Kapan dikerjakan:** kalau Deny minta, atau kalau ada yang mengeluh soal
+keterbacaan. Jangan diubah tanpa keputusannya — token ini dipakai di banyak
+tempat sekaligus.
 
 ---
 
