@@ -776,7 +776,8 @@ di chat dan di panel bisa berbeda diam-diam. Uji membuktikannya dengan spy.
 
 `pengirim` **harus** `"deny"`. `kanal` wajib diisi (tanpa itu penyimpanan tidak
 bisa dilacak dan ditolak). `teks` harus memuat kata afirmatif (`simpan`, `catat`,
-`benar`, `setuju`, `lanjut`, `ya`, `ok`, `oke`, `sip`).
+`benar`, `setuju`, `lanjut`, `ya`, `ok`, `oke`, `sip`) **dan tidak boleh memuat
+kata penyangkal** (lihat penjaga negasi di bawah).
 
 ### Yang DITOLAK, dan kodenya — fail-closed
 
@@ -787,12 +788,34 @@ bisa dilacak dan ditolak). `teks` harus memuat kata afirmatif (`simpan`, `catat`
 | kalimat menyebut nama Deny | `perantara` | "kata deny, simpan" |
 | agent lain + kata pelaporan | `perantara` | "rin bilang suruh simpan" |
 | konfirmasi kosong | `konfirmasi_kosong` | `"teks": "  "` |
-| bukan perintah simpan | `tidak_afirmatif` | "nanti saja" |
+| bukan perintah simpan | `tidak_afirmatif` | "nanti saja", "gak usah" |
+| ada kata penyangkal + kata afirmatif | `ditolak` | "jangan simpan", "tidak setuju" |
+| berbentuk pertanyaan | `pertanyaan` | "simpan?", "apa ya" |
 | `kanal` tidak disebut | `kanal_kosong` | tidak bisa dilacak |
 
 **Prinsipnya: ragu = berhenti.** Tidak ada jalur "mungkin benar". Orang yang
 memerintah tidak menyebut namanya sendiri, jadi setiap kalimat yang menyebut
 "deny" diperlakukan sebagai laporan orang lain.
+
+#### Penjaga negasi (perbaikan review ronde 1, 9 Okt 2026)
+
+Cacat yang ditemukan: kata afirmatif dulu dicocokkan sebagai **substring tanpa
+penjaga negasi**, sehingga `"simpan"` ⊂ `"jangan simpan"` dan `"setuju"` ⊂
+`"tidak setuju"`. Akibatnya kalimat **penolakan** Deny lolos gerbang dan
+tertulis ke ledger — fail-open, kebalikan dari Definisi selesai #2.
+
+Sekarang, setelah kata afirmatif ditemukan, teks diperiksa lagi: kalau memuat
+**kata penyangkal** (`jangan`, `tidak`, `tdk`, `batal`, `urung`, `belum`,
+`nggak`, `enggan`, `bukan`, atau kata utuh `tak`, `gak`, `ga`, `g`, `nanti`),
+teks **ditolak** dengan kode `ditolak`. Kalau berbentuk pertanyaan (`?` atau
+kata tanya: `apa`, `apakah`, `kah`, `gimana`, `bagaimana`, `kok`, `kenapa`,
+`mengapa`, `kapan`, `siapa`), ditolak dengan kode `pertanyaan`.
+
+Sikapnya sengaja boros: **seluruh** teks yang memuat penyangkal ditolak, bukan
+hanya yang berpola "penyangkal + kata afirmatif". Konsekuensinya "jangan lupa
+simpan" ikut ditolak — itu memang disengaja. Menebak maksud kalimat bermakna
+ganda adalah jalur "mungkin benar" yang tidak ada di gerbang ini; lebih baik
+Deny mengetik "simpan" sekali lagi.
 
 ### Asal setiap penyimpanan tercatat
 

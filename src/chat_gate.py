@@ -70,6 +70,27 @@ KATA_LAPOR = ("bilang", "berkata", "kata ", "suruh", "menyuruh", "menyampaikan",
 AFIRMASI_SUB = ("simpan", "catat", "benar", "setuju", "lanjut")
 AFIRMASI_KATA = ("ya", "ok", "oke", "sip")
 
+# Kata PENYANGKAL. Kalau salah satu muncul, teksnya bukan perintah simpan —
+# bisa jadi penolakan ("jangan simpan") atau penundaan ("nanti simpan").
+# Tanpa penjaga ini, "simpan" ⊂ "jangan simpan" dan "setuju" ⊂ "tidak setuju",
+# jadi kalimat PENOLAKAN Deny lolos gerbang dan tertulis ke ledger — fail-open,
+# persis yang dilarang Definisi selesai #2 ("ragu → berhenti").
+#
+# Sikapnya sengaja boros: SELURUH teks yang memuat penyangkal ditolak, bukan
+# hanya yang berpola "penyangkal + kata afirmatif". Lebih baik Deny mengetik
+# "simpan" sekali lagi daripada satu angka masuk tanpa perintahnya. Ini juga
+# berarti "jangan lupa simpan" ikut ditolak — itu memang disengaja: menebak
+# maksud kalimat bermakna ganda adalah jalur "mungkin benar" yang tidak ada.
+NEGASI_SUB = ("jangan", "tidak", "tdk", "batal", "urung", "belum", "nggak",
+              "enggan", "bukan")
+NEGASI_KATA = ("tak", "gak", "ga", "g", "nanti")
+
+# Kata tanya. Kalimat yang bertanya bukan perintah, walau memuat kata
+# afirmatif ("apa ya" memuat kata utuh "ya"). Dicocokkan sebagai kata utuh
+# supaya "siapa" tidak tertangkap oleh "apa".
+KATA_TANYA = ("apa", "apakah", "kah", "gimana", "bagaimana", "kok", "kenapa",
+              "mengapa", "kapan", "siapa")
+
 LABEL_SIFAT = {
     "expense": "Pengeluaran",
     "income": "Pemasukan",
@@ -243,6 +264,30 @@ def periksa_konfirmasi(konfirmasi):
         return ("tidak_afirmatif",
                 "Konfirmasi itu tidak berisi perintah simpan yang jelas. "
                 "Balas \"simpan\" kalau memang mau disimpan.")
+
+    # Penjaga negasi — diperiksa SETELAH kita tahu ada kata afirmatif.
+    # Urutannya penting: "jangan simpan" memuat kata afirmatif "simpan", jadi
+    # tanpa penjaga ini ia lolos dan tertulis ke ledger. Fail-closed berarti
+    # penyangkal menang. Ditaruh setelah cek afirmatif supaya teks tanpa
+    # perintah sama sekali ("nanti saja") tetap diberi kode `tidak_afirmatif`
+    # yang lebih tepat, bukan `ditolak`.
+    if (any(k in rendah for k in NEGASI_SUB)
+            or any(re.search(r"\b%s\b" % re.escape(k), rendah)
+                   for k in NEGASI_KATA)):
+        return ("ditolak",
+                "Kalimat itu memuat kata penyangkalan ('jangan', 'tidak', "
+                "'batal', 'nanti', dan sejenisnya), jadi bunyinya seperti "
+                "penolakan atau penundaan — bukan perintah simpan. Aku "
+                "berhenti. Balas \"simpan\" kalau memang mau disimpan.")
+
+    # Pertanyaan bukan perintah. "simpan?" / "apa ya" mengandung kata afirmatif
+    # (kata utuh "ya") tapi sedang bertanya, bukan menyuruh — fail-closed:
+    # berhenti. Kata tanya dicocokkan sebagai kata utuh supaya "siapa" tidak
+    # ikut tertangkap oleh "apa".
+    if "?" in teks or any(re.search(r"\b%s\b" % k, rendah) for k in KATA_TANYA):
+        return ("pertanyaan",
+                "Kalimat itu berbentuk pertanyaan, bukan perintah simpan. "
+                "Aku berhenti. Balas \"simpan\" kalau memang mau disimpan.")
 
     kanal = (konfirmasi.get("kanal") or "").strip()
     if not kanal:

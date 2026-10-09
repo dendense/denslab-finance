@@ -151,6 +151,47 @@ cek("baris salinan TIDAK bertambah setelah semua penolakan", hitung(SALINAN), se
 cek_benar("tidak ada jejak dibuat untuk penolakan", not LOG.exists())
 
 
+# ── (b2) PENJAGA NEGASI — penolakan Deny tidak boleh jadi perintah ──────────
+# Ditemukan di review ronde 1: tanpa penjaga ini "jangan simpan" LOLOS karena
+# "simpan" ⊂ "jangan simpan" (dan "setuju" ⊂ "tidak setuju"), lalu simpan()
+# menulis ke ledger — fail-open, melanggar Definisi selesai #2. Regresi ini
+# mengunci kelas cacat itu supaya tidak kembali.
+print("\n(b2) penjaga negasi — penolakan/pertanyaan tidak boleh tersimpan")
+sebelum_negasi = hitung(SALINAN)
+kasus_negasi = [
+    ("jangan simpan", "ditolak"),
+    ("tidak benar, jangan catat", "ditolak"),
+    ("tidak setuju", "ditolak"),
+    ("jangan disimpan dulu", "ditolak"),
+    ("batal, jangan lanjut", "ditolak"),
+    ("tidak usah catat", "ditolak"),
+    ("nanti simpan", "ditolak"),
+    ("urung simpan", "ditolak"),
+    ("belum perlu simpan", "ditolak"),
+    ("tak simpan", "ditolak"),
+    ("bukan sekarang, simpan nanti", "ditolak"),
+    ("gak usah", "tidak_afirmatif"),
+    ("nggak perlu", "tidak_afirmatif"),
+    ("apa ya", "pertanyaan"),
+    ("simpan?", "pertanyaan"),
+    ("sudah simpan belum?", "ditolak"),
+]
+for teks_neg, harap_neg in kasus_negasi:
+    h_neg = chat_gate.simpan(
+        d, {"pengirim": "deny", "kanal": "telegram", "teks": teks_neg},
+        path=SALINAN, path_log=LOG)
+    cek("tolak '%s'" % teks_neg, h_neg.get("error"), harap_neg)
+cek("baris salinan TIDAK bertambah setelah semua negasi",
+    hitung(SALINAN), sebelum_negasi)
+
+# Kontrol: penjaga tidak boleh terlalu luas sampai ikut menolak perintah sah.
+for teks_ok in ("simpan", "ya, simpan", "oke simpan", "setuju", "sip",
+                "tolong catat", "lanjut simpan", "silakan simpan"):
+    tolak_ok = chat_gate.periksa_konfirmasi(
+        {"pengirim": "deny", "kanal": "telegram", "teks": teks_ok})
+    cek_benar("perintah sah tetap lolos: '%s'" % teks_ok, tolak_ok is None)
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)
