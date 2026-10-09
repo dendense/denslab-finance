@@ -805,11 +805,12 @@ penjaga negasi**, sehingga `"simpan"` ⊂ `"jangan simpan"` dan `"setuju"` ⊂
 tertulis ke ledger — fail-open, kebalikan dari Definisi selesai #2.
 
 Sekarang, setelah kata afirmatif ditemukan, teks diperiksa lagi: kalau memuat
-**kata penyangkal** (`jangan`, `tidak`, `tdk`, `batal`, `urung`, `belum`,
-`nggak`, `enggan`, `bukan`, atau kata utuh `tak`, `gak`, `ga`, `g`, `nanti`),
-teks **ditolak** dengan kode `ditolak`. Kalau berbentuk pertanyaan (`?` atau
-kata tanya: `apa`, `apakah`, `kah`, `gimana`, `bagaimana`, `kok`, `kenapa`,
-`mengapa`, `kapan`, `siapa`), ditolak dengan kode `pertanyaan`.
+**kata penyangkal** (`jangan`, `jgn`, `tidak`, `tdk`, `batal`, `urung`, `belum`,
+`belom`, `nggak`, `enggan`, `engga`, `enggak`, `gausah`, `bukan`, atau kata utuh
+`tak`, `gak`, `gk`, `ga`, `g`, `nanti`), teks **ditolak** dengan kode `ditolak`.
+Kalau berbentuk pertanyaan (`?` atau kata tanya: `apa`, `apakah`, `kah`,
+`gimana`, `bagaimana`, `kok`, `kenapa`, `mengapa`, `kapan`, `siapa`), ditolak
+dengan kode `pertanyaan`.
 
 Sikapnya sengaja boros: **seluruh** teks yang memuat penyangkal ditolak, bukan
 hanya yang berpola "penyangkal + kata afirmatif". Konsekuensinya "jangan lupa

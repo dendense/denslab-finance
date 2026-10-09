@@ -81,9 +81,9 @@ AFIRMASI_KATA = ("ya", "ok", "oke", "sip")
 # "simpan" sekali lagi daripada satu angka masuk tanpa perintahnya. Ini juga
 # berarti "jangan lupa simpan" ikut ditolak — itu memang disengaja: menebak
 # maksud kalimat bermakna ganda adalah jalur "mungkin benar" yang tidak ada.
-NEGASI_SUB = ("jangan", "tidak", "tdk", "batal", "urung", "belum", "nggak",
-              "enggan", "bukan")
-NEGASI_KATA = ("tak", "gak", "ga", "g", "nanti")
+NEGASI_SUB = ("jangan", "jgn", "tidak", "tdk", "batal", "urung", "belum",
+              "belom", "nggak", "enggan", "engga", "enggak", "gausah", "bukan")
+NEGASI_KATA = ("tak", "gak", "gk", "ga", "g", "nanti")
 
 # Kata tanya. Kalimat yang bertanya bukan perintah, walau memuat kata
 # afirmatif ("apa ya" memuat kata utuh "ya"). Dicocokkan sebagai kata utuh
