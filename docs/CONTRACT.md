@@ -790,6 +790,7 @@ perintah sah** (daftar putih — lihat di bawah).
 | bukan perintah simpan | `tidak_afirmatif` | "nanti saja", "gak usah", "stop" |
 | ada kata penyangkal + kata afirmatif | `ditolak` | "jangan simpan", "tidak setuju" |
 | bentuk di luar daftar putih | `ditolak` | "ndak usah simpan", "simpan aja", "sudah saya simpan" |
+| teks memuat karakter non-huruf/angka di luar pemisah netral | `ditolak` | "❌ simpan", "simpan 🔥", "si-mpan" |
 | berbentuk pertanyaan | `pertanyaan` | "simpan?", "apa ya" |
 | `kanal` tidak disebut | `kanal_kosong` | tidak bisa dilacak |
 
@@ -829,6 +830,25 @@ tapi sekarang hanya untuk memilih kode pesan yang lebih tepat (`ditolak` vs
 `tidak_afirmatif`); yang benar-benar menjaga adalah daftar putih ini. Menambah
 kata ke daftar hitam tidak lagi bisa membuka lubang, karena daftar hitam bukan
 lagi gerbangnya.
+
+#### Karakter asing ditolak — penanda penolakan tidak boleh hilang (perbaikan review ronde 4, 9 Okt 2026)
+
+Daftar putih menutup kebocoran tingkat-kata (ronde 1 & 3), tapi normalisasi di
+hulunya masih bocor di tingkat-karakter. `_normalisasi_perintah()` versi lama
+memakai `re.sub(r"[^\w\s]+", " ", ...)` dan membuang **setiap** karakter non-
+huruf/angka tanpa syarat. Penanda penolakan yang lazim di chat ikut terhapus
+sebelum gerbang memutuskan, dan sisa teksnya jadi persis perintah yang diakui.
+Bentuk berikut **benar-benar tertulis ke ledger** sebelum perbaikan ini
+(pengirim `"deny"`, di salinan): `❌ simpan`, `⛔ simpan`, `🚫 simpan`,
+`✗ simpan`, `✖ simpan`, `simpan ❌` — masing-masing menambah satu baris
+(42→48). Kelas cacatnya sama dengan ronde 1 & 3: penolakan Deny diperlakukan
+sebagai perintah.
+
+Perbaikannya: normalisasi hanya memetakan **pemisah netral** (`,` `.` `!`) ke
+spasi. Kalau teks masih memuat karakter di luar huruf/angka/spasi,
+`perintah_diizinkan()` mengembalikan **False** — jadi `ya, simpan` tetap lolos,
+tapi `❌ simpan`, `simpan 🔥`, dan `si-mpan` berhenti. Sebuah penanda penolakan
+tidak boleh bisa hilang sebelum gerbang memutuskan.
 
 ### Asal setiap penyimpanan tercatat
 

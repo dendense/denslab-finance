@@ -57,10 +57,13 @@ print("  baris sebelum=%d sesudah=%d  %s"
 # 2. PENOLAKAN Deny — harus DITOLAK, fail-closed.
 #    Termasuk bentuk yang dulu bocor (ronde 3): 'ndak usah simpan', 'no simpan',
 #    'sudah saya simpan', 'simpan aja'. Semua ini dulu benar-benar TERTULIS.
+#    Dan bentuk bocor ronde 4 (penanda penolakan yang dulu dibuang normalisasi):
+#    '❌ simpan', '⛔ simpan', 'simpan ❌'.
 print("\n2. Deny membalas PENOLAKAN (harus ditolak, nol baris)")
 sebelum = baris()
 for teks in ("jangan simpan", "tidak setuju", "batal, jangan lanjut",
-             "ndak usah simpan", "no simpan", "udah simpan", "simpan aja"):
+             "ndak usah simpan", "no simpan", "udah simpan", "simpan aja",
+             "\u274c simpan", "\u26d4 simpan", "simpan \u274c"):
     out = chat_gate.simpan(
         hasil, {"pengirim": "deny", "kanal": "telegram", "teks": teks},
         path=SALINAN, path_log=LOG)

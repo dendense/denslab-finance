@@ -103,7 +103,7 @@ KATA_TANYA = ("apa", "apakah", "kah", "gimana", "bagaimana", "kok", "kenapa",
 # berhenti". Daftar hitam di atas tetap ada, tapi sekarang hanya untuk memilih
 # kode pesan yang lebih tepat — yang menjaga adalah daftar putih ini.
 #
-# Bentuk sah, setelah normalisasi (huruf kecil, tanda baca dibuang, spasi
+# Bentuk sah, setelah normalisasi (huruf kecil, pemisah netral -> spasi, spasi
 # dirapatkan):
 #   * satu kata afirmatif:  ya · iya · ok · oke · sip · setuju · benar
 #   * satu kata perintah:   simpan · catat
@@ -112,24 +112,57 @@ KATA_TANYA = ("apa", "apakah", "kah", "gimana", "bagaimana", "kok", "kenapa",
 # Di luar itu DITOLAK fail-closed. "simpan aja" ikut ditolak — Deny cukup
 # mengetik "simpan" sekali lagi, dan itu jauh lebih baik daripada satu angka
 # masuk tanpa perintahnya.
+#
+# ── Karakter asing juga DITOLAK (perbaikan review ronde 4, 9 Okt 2026) ──────
+# Normalisasi versi lama membuang SEMUA karakter non-huruf/angka tanpa syarat
+# (`re.sub(r"[^\w\s]+", " ", ...)`). Akibatnya penanda penolakan yang lazim di
+# chat ikut hilang SEBELUM gerbang memutuskan: '❌ simpan', '⛔ simpan',
+# '🚫 simpan', 'simpan ❌' semuanya menormalisasi jadi 'simpan' dan LOLOS —
+# masing-masing benar-benar tertulis ke ledger. Itu kelas cacat yang sama
+# dengan ronde 1 & 3 (penolakan Deny diperlakukan sebagai perintah).
+# Sekarang hanya PEMISAH NETRAL (`,` `.` `!`) yang dipetakan ke spasi. Kalau
+# teks masih memuat karakter di luar huruf/angka/spasi, `perintah_diizinkan()`
+# mengembalikan False — jadi 'ya, simpan' tetap lolos, tapi '❌ simpan',
+# 'simpan🔥', 'si-mpan' berhenti. Sebuah penanda penolakan tidak boleh bisa
+# hilang sebelum gerbang memutuskan.
 PERINTAH_KATA = ("simpan", "catat")
 AFIRMASI_TUNGGAL = ("ya", "iya", "ok", "oke", "sip", "setuju", "benar")
 PREFIKS_PERINTAH = ("ya", "iya", "ok", "oke", "sip", "silakan", "tolong",
                     "lanjut", "setuju", "benar", "gas", "ayo")
 
+# Satu-satunya tanda baca yang netral — ia tidak membawa makna perintah maupun
+# penolakan, jadi boleh dipetakan ke spasi. Selain ini: tolak.
+PEMISAH_NETRAL = (",", ".", "!")
+_POLA_ASING = re.compile(r"[^a-z0-9\s]")
+
 
 def _normalisasi_perintah(teks):
-    """Huruf kecil, tanda baca -> spasi, spasi dirapatkan. 'ya, simpan' -> 'ya simpan'."""
-    t = re.sub(r"[^\w\s]+", " ", teks.lower())
+    """Huruf kecil, PEMISAH NETRAL -> spasi, spasi dirapatkan.
+
+    'ya, simpan' -> 'ya simpan'. Karakter di luar pemisah netral TIDAK dibuang
+    di sini — pembuangan buta adalah cacat ronde 4 (penanda penolakan hilang).
+    Pemeriksaannya ada di `perintah_diizinkan()`.
+    """
+    t = teks.lower()
+    for p in PEMISAH_NETRAL:
+        t = t.replace(p, " ")
     return re.sub(r"\s+", " ", t).strip()
 
 
 def perintah_diizinkan(teks):
     """True HANYA kalau teks cocok persis salah satu bentuk perintah sah.
 
-    Ini gerbang fail-closed: apa pun yang tidak diakui di sini berhenti.
+    Fail-closed dua lapis:
+      1. karakter asing — apa pun di luar huruf/angka/spasi (setelah pemisah
+         netral dipetakan) -> False. '❌ simpan', 'simpan🔥', 'si-mpan' berhenti.
+      2. daftar putih bentuk perintah.
     """
-    kata = _normalisasi_perintah(teks).split()
+    if not isinstance(teks, str):
+        return False
+    bersih = _normalisasi_perintah(teks)
+    if _POLA_ASING.search(bersih):
+        return False
+    kata = bersih.split()
     if len(kata) == 1:
         return kata[0] in AFIRMASI_TUNGGAL or kata[0] in PERINTAH_KATA
     if len(kata) == 2:

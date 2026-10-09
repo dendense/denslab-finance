@@ -251,6 +251,49 @@ for teks_luar in ("ndak usah simpan", "no simpan", "simpan aja", "udah simpan",
               not chat_gate.perintah_diizinkan(teks_luar))
 
 
+# ── (b4) KARAKTER ASING — penanda penolakan tidak boleh hilang ──────────────
+# Ditemukan di review ronde 4: `_normalisasi_perintah()` versi lama memakai
+# `re.sub(r"[^\w\s]+", " ", ...)` dan membuang SEMUA karakter non-huruf/angka
+# tanpa syarat. Penanda penolakan lazim di chat ikut terhapus sebelum gerbang
+# memutuskan, dan sisa teksnya jadi persis perintah yang diakui daftar putih.
+# Bentuk berikut benar-benar TERTULIS ke ledger sebelum perbaikan ini
+# (pengirim "deny"): '❌ simpan', '⛔ simpan', '🚫 simpan', '✗ simpan',
+# '✖ simpan', 'simpan ❌' — masing-masing baris 42->48 di salinan.
+# Perbaikan: hanya pemisah netral (`,` `.` `!`) yang dipetakan ke spasi;
+# kalau teks masih memuat karakter di luar huruf/angka/spasi, ditolak.
+print("\n(b4) karakter asing — penanda penolakan tidak boleh hilang (fail-closed)")
+sebelum_asing = hitung(SALINAN)
+kasus_asing = [
+    ("\u274c simpan", "ditolak"),
+    ("\u26d4 simpan", "ditolak"),
+    ("\U0001f6ab simpan", "ditolak"),
+    ("\u2717 simpan", "ditolak"),
+    ("\u2716 simpan", "ditolak"),
+    ("simpan \u274c", "ditolak"),
+    ("simpan\U0001f525", "ditolak"),
+    # 'si-mpan' tidak memuat kata afirmatif sama sekali, jadi sudah ditolak
+    # lebih awal sebagai `tidak_afirmatif`. Ditolaknya sama — itu yang penting.
+    ("si-mpan", "tidak_afirmatif"),
+]
+for teks_a, harap_a in kasus_asing:
+    h_a = chat_gate.simpan(
+        d, {"pengirim": "deny", "kanal": "telegram", "teks": teks_a},
+        path=SALINAN, path_log=LOG)
+    cek("asing tolak %r" % teks_a, h_a.get("error"), harap_a)
+cek("baris salinan TIDAK bertambah setelah semua bentuk berkarakter asing",
+    hitung(SALINAN), sebelum_asing)
+
+# Unit langsung: karakter asing -> False; pemisah netral tetap lolos.
+print("  -- perintah_diizinkan() dengan karakter --")
+for teks_a in ("\u274c simpan", "\u26d4 simpan", "\U0001f6ab simpan", "\u2717 simpan",
+               "\u2716 simpan", "simpan \u274c", "simpan\U0001f525", "si-mpan"):
+    cek_benar("berkarakter asing ditolak: %r" % teks_a,
+              not chat_gate.perintah_diizinkan(teks_a))
+for teks_a in ("ya, simpan", "oke simpan", "tolong catat", "simpan", "ya"):
+    cek_benar("pemisah netral tetap lolos: %r" % teks_a,
+              chat_gate.perintah_diizinkan(teks_a))
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)

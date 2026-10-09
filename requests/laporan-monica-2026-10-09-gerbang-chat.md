@@ -4,17 +4,78 @@
 **Tanggal:** 9 Okt 2026
 **Kartu:** `t_0c4c4678`
 **Status:** selesai — semua bukti di bawah dijalankan sungguhan, bukan didesain
-**Revisi:** ronde 3 (9 Okt 2026) — menutup temuan review ronde 3 (daftar hitam
-penyangkal bocor → gerbang dibalik jadi daftar putih)
+**Revisi:** ronde 4 (9 Okt 2026) — menutup temuan review ronde 4 (normalisasi
+
+  membuang penanda penolakan → karakter asing kini ditolak, fail-closed)
 
 ---
 
-## Perubahan ronde 3 — daftar putih menggantikan daftar hitam
+## Perubahan ronde 4 — karakter asing ditolak (penanda penolakan tidak boleh hilang)
+
+Review ronde 4 membuktikan daftar putih (ronde 3) masih bocor di **hulunya**:
+`_normalisasi_perintah()` memakai `re.sub(r"[^\w\s]+", " ", teks.lower())` dan
+membuang **setiap** karakter non-huruf/angka tanpa syarat. Emoji/simbol
+penolakan ikut terhapus **sebelum** gerbang memutuskan, dan sisa teksnya jadi
+persis perintah yang diakui daftar putih.
+
+Bentuk berikut **benar-benar tertulis ke ledger** sebelum perbaikan ini
+(pengirim `"deny"`, di salinan, baris 42→48):
+
+```
+'❌ simpan'  -> ok=True  42->43  TERTULIS
+'⛔ simpan'  -> ok=True  43->44  TERTULIS
+'🚫 simpan'  -> ok=True  44->45  TERTULIS
+'✗ simpan'   -> ok=True  45->46  TERTULIS
+'✖ simpan'   -> ok=True  46->47  TERTULIS
+'simpan ❌'  -> ok=True  47->48  TERTULIS
+```
+
+Kelas cacatnya sama dengan ronde 1 & 3: penolakan Deny diperlakukan sebagai
+perintah. Bedanya di tingkat: ronde 1/3 di tingkat **kata**, ronde 4 di tingkat
+**karakter**.
+
+Perbaikannya (`src/chat_gate.py`):
+
+- `_normalisasi_perintah()` kini hanya memetakan **pemisah netral** (`,` `.`
+  `!`) ke spasi. Huruf kecil + spasi dirapatkan seperti sebelumnya, tapi
+  karakter lain **tidak dibuang** lagi.
+- `perintah_diizinkan()` menolak lebih dulu kalau teks (setelah normalisasi)
+  masih memuat karakter di luar huruf/angka/spasi — `_POLA_ASING` → `False`.
+  Prinsipnya: sebuah penanda penolakan tidak boleh bisa hilang sebelum gerbang
+  memutuskan.
+- Akibatnya `ya, simpan` / `oke simpan` / `tolong catat` tetap lolos, sedangkan
+  `❌ simpan`, `simpan 🔥`, dan `si-mpan` berhenti.
+
+**Reproduksi temuan ronde 4, sekarang** (dijalankan, bukan dibaca mata):
+
+```
+normalisasi:  '❌ simpan' -> '❌ simpan'   (dulu 'simpan')
+perintah_diizinkan: '❌ simpan' -> False   (dulu True)
+periksa_konfirmasi: '❌ simpan' -> ditolak (dulu None = sah)
+
+end-to-end simpan() ke salinan:
+  '❌ simpan'  -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+  '⛔ simpan'  -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+  '🚫 simpan'  -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+  '✗ simpan'   -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+  '✖ simpan'   -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+  'simpan ❌'  -> ok=False  baris 42->42  tidak bertambah   (dulu TERTULIS)
+```
+
+**Uji:** `tests/test_chat_gate.py` 121 → **143 pemeriksaan, 0 gagal**. Tambahan
+bagian (b4): 8 bentuk berkarakter asing (`ditolak`), 8 unit `perintah_diizinkan()`
+berkarakter asing (semua ditolak), 5 kontrol pemisah netral tetap lolos. Seluruh
+**15/15** berkas uji lulus. `CONTRACT.md` §18 diperbarui: baris tabel "Yang
+DITOLAK" + sub-bagian "Karakter asing ditolak".
+
+---
+
+## Ronde 3 — daftar putih menggantikan daftar hitam
 
 Review ronde 3 membuktikan tambalan ronde 2 masih **fail-open**. Ronde 2 menutup
 penolakan dengan **daftar hitam** penyangkal, dan daftar hitam bahasa Indonesia
 informal tidak pernah selesai. Bentuk berikut **benar-benar tertulis ke ledger**
-sebelum perbaikan ini (pengirim "deny", di salinan):
+sebelum perbaikan ronde 3 (pengirim "deny", di salinan):
 
 ```
 'ndak usah simpan'   -> ok=True  rows 42->43 TERTULIS
@@ -25,52 +86,19 @@ sebelum perbaikan ini (pengirim "deny", di salinan):
 'sudah saya simpan'  -> ok=True  rows 47->48 TERTULIS
 ```
 
-Juga lolos dari `periksa_konfirmasi`: `mbok simpan`, `simpan aja`,
-`ya sudah simpan`, `nanti aja simpan`.
-
-Perbaikannya **membalik arah kegagalan**. Keputusan akhir bukan lagi "bukan
+Perbaikannya **membalik arah kegagalan**: keputusan akhir bukan lagi "bukan
 penolakan yang kita kenali", melainkan "**bentuk perintah yang kita akui**".
-Fungsi baru `perintah_diizinkan()` memeriksa teks (setelah normalisasi: huruf
-kecil, tanda baca → spasi, spasi dirapatkan) terhadap **daftar putih**:
+Fungsi `perintah_diizinkan()` memeriksa teks terhadap **daftar putih**:
 
 - satu kata afirmatif: `ya` · `iya` · `ok` · `oke` · `sip` · `setuju` · `benar`
 - satu kata perintah: `simpan` · `catat`
 - prefiks + perintah: `ya simpan` · `oke simpan` · `tolong catat` ·
   `lanjut simpan` · `silakan simpan` · `gas simpan` · `ayo catat` …
 
-**Apa pun di luar daftar itu DITOLAK** (`ditolak`), fail-closed. Konsekuensinya
-`"simpan aja"` ikut ditolak — disengaja: Deny cukup mengetik `"simpan"` sekali
-lagi, dan itu jauh lebih baik daripada satu angka masuk tanpa perintahnya.
-
-Daftar hitam penyangkal ronde 2 **tetap ada**, tapi turun peran: sekarang hanya
-memilih kode pesan yang lebih tepat (`ditolak` vs `tidak_afirmatif`). Yang
-benar-benar menjaga adalah daftar putih. Menambah kata ke daftar hitam tidak
-lagi bisa membuka lubang, karena daftar hitam bukan lagi gerbangnya — inilah
-kenapa kelas cacat ini tidak bisa kembali lewat kata baru mana pun.
-
-**Reproduksi temuan ronde 3, sekarang** (dijalankan, bukan dibaca mata):
-
-```
-'ndak usah simpan'     -> ditolak
-'ndak simpan'          -> ditolak
-'kagak usah simpan'    -> ditolak
-'no simpan'            -> ditolak
-'udah simpan'          -> ditolak
-'sudah saya simpan'    -> ditolak
-'mbok simpan'          -> ditolak
-'simpan aja'           -> ditolak
-'ya sudah simpan'      -> ditolak
-'nanti aja simpan'     -> ditolak
-```
-
-**Uji:** `tests/test_chat_gate.py` 74 → **121 pemeriksaan, 0 gagal**. Termasuk
-17 bentuk bocor ronde 3 (semua `ditolak`), unit langsung `perintah_diizinkan()`
-(18 bentuk sah diakui, 11 di luar daftar ditolak), dan 8 kontrol perintah sah
-yang tetap lolos (`simpan`, `ya, simpan`, `oke simpan`, `setuju`, `sip`,
-`tolong catat`, `lanjut simpan`, `silakan simpan`). Seluruh 15 berkas uji lulus.
-
-`CONTRACT.md` §18 diperbarui: bagian "Penjaga negasi" diganti "Daftar putih
-perintah — gerbang sebenarnya", tabel "Yang DITOLAK" ditambah baris daftar putih.
+**Apa pun di luar daftar itu DITOLAK** (`ditolak`), fail-closed. Daftar hitam
+penyangkal ronde 2 tetap ada tapi turun peran: hanya memilih kode pesan yang
+lebih tepat (`ditolak` vs `tidak_afirmatif`). Yang benar-benar menjaga adalah
+daftar putih — ditambah, sejak ronde 4, penolakan karakter asing di hulunya.
 
 ---
 
@@ -88,17 +116,18 @@ perintah — gerbang sebenarnya", tabel "Yang DITOLAK" ditambah baris daftar put
 
 | Berkas | Isi |
 |---|---|
-| `src/chat_gate.py` | Gerbang: `draft()` (baca-saja) + `simpan()` (menulis, tapi menuntut konfirmasi Deny), dengan daftar putih perintah. |
-| `tests/test_chat_gate.py` | 121 pemeriksaan: (a) draft tidak menulis, (b) simpan tanpa Deny ditolak, (b2) penjaga negasi, (b3) daftar putih, (c) simpan setelah Deny berhasil, (d) asal tercatat, (+) Rin tidak punya jalur simpan. |
+| `src/chat_gate.py` | Gerbang: `draft()` (baca-saja) + `simpan()` (menulis, tapi menuntut konfirmasi Deny), dengan daftar putih perintah + penolakan karakter asing. |
+| `tests/test_chat_gate.py` | 143 pemeriksaan: (a) draft tidak menulis, (b) simpan tanpa Deny ditolak, (b2) penjaga negasi, (b3) daftar putih, (b4) karakter asing, (c) simpan setelah Deny berhasil, (d) asal tercatat, (+) Rin tidak punya jalur simpan. |
 | `scripts/contoh_draft_chat.py` | Contoh keluaran draft NYATA lewat parser hidup. |
-| `scripts/uji_hidup_chat.py` | Alur hidup: draft → tolak (termasuk bentuk bocor ronde 3) → tolak Rin → simpan Deny, di salinan. |
-| `docs/CONTRACT.md` §18 | Aturan lengkap, termasuk daftar putih dan batas yang jujur. |
+| `scripts/uji_hidup_chat.py` | Alur hidup: draft → tolak (termasuk bentuk bocor ronde 3 & 4) → tolak Rin → simpan Deny, di salinan. |
+| `docs/CONTRACT.md` §18 | Aturan lengkap, termasuk daftar putih, aturan karakter asing, dan batas yang jujur. |
 | `.gitignore` | `chat_simpan.log` (data, bukan kode). |
 
 `draft()` memakai **parser yang sama** dengan halaman Catat
 (`parser_wrap.parse_kontrak`) — tidak ada jalur parse kedua. Diuji dengan spy.
 
-Commit: ronde 1 `bbe807c`, ronde 2 `9f6a56d` + `d26447d`, ronde 3 di bawah ini.
+Commit: ronde 1 `bbe807c`, ronde 2 `9f6a56d` + `d26447d`, ronde 3 `ca0ec4c`,
+ronde 4 di bawah ini.
 
 ---
 
@@ -107,7 +136,7 @@ Commit: ronde 1 `bbe807c`, ronde 2 `9f6a56d` + `d26447d`, ronde 3 di bawah ini.
 ### Uji otomatis
 
 ```
-python3 tests/test_chat_gate.py     ->  HASIL: semua uji lulus  (121 pemeriksaan)
+python3 tests/test_chat_gate.py     ->  HASIL: semua uji lulus  (143 pemeriksaan)
 seluruh 15 berkas uji di tests/     ->  15 lulus, 0 gagal
 ```
 
@@ -141,6 +170,9 @@ yang tertinggal di folder data Deny (diperiksa langsung).
      "no simpan"              -> ditolak
      "udah simpan"            -> ditolak
      "simpan aja"             -> ditolak
+     "❌ simpan"              -> ditolak
+     "⛔ simpan"              -> ditolak
+     "simpan ❌"              -> ditolak
      baris sebelum=42 sesudah=42  TIDAK bertambah
      jejak dibuat? tidak
 
@@ -151,7 +183,7 @@ yang tertinggal di folder data Deny (diperiksa langsung).
 4. Deny memerintahkan simpan
      -> ok=True id=[113]
      baris sebelum=42 sesudah=43
-     jejak asal: {"disimpan_pada": "2026-10-09T09:52:00", "pengirim": "deny",
+     jejak asal: {"disimpan_pada": "2026-10-09T10:00:45", "pengirim": "deny",
                   "kanal": "telegram", "waktu_konfirmasi": "2026-10-09T21:30:00",
                   "teks_konfirmasi": "simpan", "jumlah": 1, "saved_ids": [113]}
 ```
