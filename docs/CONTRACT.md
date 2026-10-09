@@ -736,3 +736,112 @@ terpakai, kebalikan dari maksudnya.
 
 **Kalau endpoint mati, tanda "sudah diperiksa" TIDAK dipasang** — percobaan
 berikutnya masih boleh jalan.
+
+---
+
+## 18. Pencatatan lewat chat — draft dulu, simpan hanya atas Deny (9 Okt 2026)
+
+Modul: `src/chat_gate.py` · uji: `tests/test_chat_gate.py` ·
+contoh keluaran: `scripts/contoh_draft_chat.py`
+
+**Keputusan Deny, dijawab langsung (bukan lewat perantara), 9 Okt 2026:**
+
+| # | Pertanyaan | Keputusan |
+|---|---|---|
+| 1 | Boleh mencatat lewat chat atas perintah yang disampaikan Rin? | **YA** |
+| 2 | Konfirmasi tetap dua langkah? | **YA — wajib** |
+| 3 | Rin boleh menyimpan sendiri? | **TIDAK — setiap simpan lewat Deny** |
+
+Aturan panel "AI tidak pernah menulis langsung ke database" **tidak dibatalkan**
+— konfirmasi hanya berpindah dari tombol panel ke pesan chat, dan tetap
+dipegang manusia.
+
+### Dua langkah, dan tidak ada langkah ketiga
+
+```
+draft(teks)                       -> nol baris tersimpan, hanya baca
+simpan(draft, konfirmasi)         -> menulis, TAPI menolak kalau konfirmasi
+                                     bukan dari Deny sendiri
+```
+
+`draft()` memakai **parser yang sama** dengan halaman Catat
+(`parser_wrap.parse_kontrak`). Tidak ada jalur parse kedua — kalau ada, draft
+di chat dan di panel bisa berbeda diam-diam. Uji membuktikannya dengan spy.
+
+### Bentuk konfirmasi yang sah
+
+```json
+{ "pengirim": "deny", "kanal": "telegram", "teks": "simpan" }
+```
+
+`pengirim` **harus** `"deny"`. `kanal` wajib diisi (tanpa itu penyimpanan tidak
+bisa dilacak dan ditolak). `teks` harus memuat kata afirmatif (`simpan`, `catat`,
+`benar`, `setuju`, `lanjut`, `ya`, `ok`, `oke`, `sip`).
+
+### Yang DITOLAK, dan kodenya — fail-closed
+
+| Keadaan | Kode | Contoh |
+|---|---|---|
+| tidak ada konfirmasi | `tanpa_konfirmasi` | — |
+| `pengirim` bukan deny | `bukan_deny` | Rin memanggil `simpan()` langsung |
+| kalimat menyebut nama Deny | `perantara` | "kata deny, simpan" |
+| agent lain + kata pelaporan | `perantara` | "rin bilang suruh simpan" |
+| konfirmasi kosong | `konfirmasi_kosong` | `"teks": "  "` |
+| bukan perintah simpan | `tidak_afirmatif` | "nanti saja" |
+| `kanal` tidak disebut | `kanal_kosong` | tidak bisa dilacak |
+
+**Prinsipnya: ragu = berhenti.** Tidak ada jalur "mungkin benar". Orang yang
+memerintah tidak menyebut namanya sendiri, jadi setiap kalimat yang menyebut
+"deny" diperlakukan sebagai laporan orang lain.
+
+### Asal setiap penyimpanan tercatat
+
+Setelah simpan berhasil, satu baris JSON ditulis ke
+`<folder data>/chat_simpan.log`:
+
+```json
+{"disimpan_pada": "...", "pengirim": "deny", "kanal": "telegram",
+ "waktu_konfirmasi": "...", "teks_konfirmasi": "simpan",
+ "jumlah": 1, "saved_ids": [113]}
+```
+
+Ditulis **setelah** `db.save_transactions` berhasil. Aman: penyimpanan itu satu
+transaksi database (semua-atau-tidak-sama-sekali), jadi tidak ada keadaan
+setengah jadi yang perlu dilacak lebih dulu.
+
+### Rin tidak punya jalur simpan — bukti, bukan desain
+
+Diuji lewat AST, bukan dibaca mata:
+
+- hanya `simpan()` yang memanggil penulisan ledger (`db.save_transactions` /
+  `UPDATE` / `INSERT` / `DELETE`); semua fungsi lain di modul itu baca-saja;
+- `server.py` tidak mengimpor `chat_gate`, dan tidak ada rute `/api/chat`;
+- tidak ada `auto_simpan`/`force_save`/`save_now`;
+- memanggil `simpan()` dengan `pengirim: "rin"` **tetap ditolak** (`bukan_deny`).
+
+### BATAS YANG JUJUR — jangan diklaim lebih dari ini
+
+Modul ini **tidak bisa memverifikasi identitas.** Tidak ada kriptografi, dan
+tidak ditambahkan: keputusan Deny melarang kunci API baru. Yang ditegakkan
+hanya **struktur perintah** (dua langkah, orang-pertama, jejak asal). Kalau
+seseorang mengetik `pengirim: "deny"` padahal bukan Deny, gerbang ini tidak
+tahu. Aturan "Rin tidak punya jalur simpan" dipenuhi oleh kenyataan bahwa
+**tidak ada** fungsi/endpoint/perintah yang bisa dipanggil Rin tanpa melewati
+satu langkah yang dipegang manusia — bukan oleh gerbang ini sendiri.
+
+### Postur jaringan tidak berubah
+
+`chat_gate.py` tidak mengimpor modul jaringan apa pun, tidak membuka port, dan
+tidak menyentuh kunci API. Server tetap `127.0.0.1`. Modul ini membaca
+`finance.db` langsung sebagai proses di Mac yang sama — persis seperti yang
+diusulkan di surat `requests/monica-ke-steve-2026-10-09-akses-tulis-chat.md`.
+
+### Jalur CLI (untuk Deny di Mac yang sama)
+
+```
+python3 src/chat_gate.py "makan malam 45000"                  # draft saja
+python3 src/chat_gate.py "makan malam 45000" --simpan \
+        --kanal telegram --teks "simpan"                      # simpan
+```
+
+Bukan jalur chat. Tidak ada yang bisa memanggilnya dari jarak jauh.

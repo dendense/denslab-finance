@@ -32,6 +32,9 @@ kredensial.json
 # Log hapus (menyalin isi baris yang dihapus)
 terhapus.log
 
+# Log asal penyimpanan lewat chat (siapa memerintah, kapan, dari chat mana)
+chat_simpan.log
+
 # Rekening koran asli: berisi nomor rekening dan seluruh riwayat transaksi
 statements/
 *.pdf
