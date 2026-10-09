@@ -329,6 +329,46 @@ for label_m, konf_m, kode_m in (
     cek("%s -> kode asli" % label_m, h_m.get("error"), kode_m)
 
 
+# ── (b6) BENTUK SALAH DARI PARSER/DRAFT — kode, bukan exception ─────────────
+# Kelas cacat yang sama dengan (b5), tapi di jalur draft: `draft()` dengan
+# hasil parser berbentuk salah dan `simpan()` dengan `draft_hasil` berbentuk
+# salah dulu melempar AttributeError/TypeError. Ditutup di ronde yang sama
+# supaya tidak menyisakan satu pintu lagi untuk kelas yang sama.
+print("\n(b6) bentuk salah dari parser/draft — kode, bukan exception")
+sebelum_bentuk = hitung(SALINAN)
+_konf_sah = {"pengirim": "deny", "kanal": "telegram", "teks": "simpan"}
+
+# draft(): parse_fn mengembalikan bentuk yang tidak dikenal.
+for label_b, fn_b in (
+        ("parser -> list", lambda t: []),
+        ("parser -> str", lambda t: "x"),
+        ("parser -> None", lambda t: None),
+        ("parser -> draft str", lambda t: {"ok": True, "draft": "x"}),
+        ("parser -> tx bukan list", lambda t: {"ok": True, "draft": {"transactions": 5}}),
+        ("parser -> tx bukan dict", lambda t: {"ok": True, "draft": {"transactions": ["x"]}})):
+    try:
+        h_b = chat_gate.draft("makan 1000", path=SALINAN, parse_fn=fn_b)
+        cek("draft() %s -> ok False" % label_b, (h_b or {}).get("ok"), False)
+    except Exception as e:
+        cek_benar("draft() %s -> kode (lempar %r)" % (label_b, e), False)
+
+# simpan(): draft_hasil berbentuk salah.
+for label_b, draft_b in (
+        ("draft_hasil str", "x"),
+        ("draft_hasil int", 123),
+        ("draft_hasil draft str", {"ok": True, "draft": "x"}),
+        ("draft_hasil tx bukan list", {"ok": True, "draft": {"transactions": 5}}),
+        ("draft_hasil tx bukan dict", {"ok": True, "draft": {"transactions": ["x"]}})):
+    try:
+        h_b = chat_gate.simpan(draft_b, _konf_sah, path=SALINAN, path_log=LOG)
+        cek("simpan() %s -> kode" % label_b, h_b.get("error"), "draft_tidak_sah")
+    except Exception as e:
+        cek_benar("simpan() %s -> kode (lempar %r)" % (label_b, e), False)
+
+cek("baris salinan TIDAK bertambah setelah bentuk salah",
+    hitung(SALINAN), sebelum_bentuk)
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)

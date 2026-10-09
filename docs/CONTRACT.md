@@ -869,6 +869,17 @@ Perbaikannya: sebelum `.strip()`, kalau field **ada** tapi bukan `str` →
 (`bukan_deny` / `konfirmasi_kosong` / `kanal_kosong`), jadi aturan ini tidak
 melebarkan arti "konfirmasi rusak" ke konfirmasi yang sekadar kurang lengkap.
 
+**Kelas yang sama di jalur draft, ditutup di ronde yang sama.** Prinsip
+"modul ini selalu memakai kode, bukan exception" tidak berhenti di konfirmasi:
+`draft()` yang menerima hasil parser berbentuk salah (`parse_fn` mengembalikan
+`list`/`str`/`None`, `draft` bukan dict, `transactions` bukan list, elemen tx
+bukan dict) dan `simpan()` yang menerima `draft_hasil` berbentuk salah dulu
+melempar `AttributeError`/`TypeError` ke pemanggil. Sekarang keduanya
+mengembalikan kode: `hasil_parser_rusak` (dari `draft()`) dan `draft_tidak_sah`
+(dari `simpan()`). Yang **tidak** berubah: `draft_hasil` yang sah-tapi-kosong
+tetap `draft_kosong`, dan `draft_hasil` yang hilang tetap `draft_tidak_sah` —
+supaya kode lama tidak bergeser artinya.
+
 ### Asal setiap penyimpanan tercatat
 
 Setelah simpan berhasil, satu baris JSON ditulis ke

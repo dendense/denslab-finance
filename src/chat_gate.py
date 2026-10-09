@@ -222,11 +222,24 @@ def draft(text, path=None, parse_fn=None):
     """
     parse_fn = parse_fn or parser_wrap.parse_kontrak
     hasil = parse_fn(text)
+    # Penjaga bentuk (kelas cacat sama dengan penjaga tipe di `simpan()`):
+    # parser yang mengembalikan bentuk salah dulu melempar AttributeError/
+    # TypeError ke pemanggil. Modul ini selalu memakai KODE, bukan exception —
+    # supaya pemanggil chat bisa menampilkan alasan, bukan stack trace.
+    if not isinstance(hasil, dict):
+        return {"ok": False, "error": "hasil_parser_rusak",
+                "message": "Parser tidak mengembalikan hasil yang dikenal."}
     if not hasil.get("ok"):
         return hasil
 
     d = hasil.get("draft") or {}
+    if not isinstance(d, dict):
+        return {"ok": False, "error": "hasil_parser_rusak",
+                "message": "Isi draft dari parser bukan bentuk yang dikenal."}
     txs = d.get("transactions") or []
+    if not isinstance(txs, list):
+        return {"ok": False, "error": "hasil_parser_rusak",
+                "message": "Daftar transaksi dari parser bukan daftar."}
     if not txs:
         return hasil
 
@@ -235,9 +248,16 @@ def draft(text, path=None, parse_fn=None):
 
     untuk_tampil = []
     for tx in txs:
+        if not isinstance(tx, dict):
+            return {"ok": False, "error": "hasil_parser_rusak",
+                    "message": "Ada transaksi dari parser yang bukan bentuk yang dikenal."}
         aid, anama = _cocokkan_akun(tx.get("account_hint"), akun)
         tid, tnama = _cocokkan_akun(tx.get("to_account_hint"), akun)
         butuh_akun = aid is None and len(akun) != 1
+        # `flow_type` non-string (mis. list) tidak boleh jadi kunci dict —
+        # itu TypeError di jalur yang seharusnya mengembalikan kode.
+        ftype = tx.get("flow_type")
+        sifat = LABEL_SIFAT.get(ftype, ftype) if isinstance(ftype, str) else None
         untuk_tampil.append({
             **tx,
             "account_id": aid,
@@ -245,7 +265,7 @@ def draft(text, path=None, parse_fn=None):
             "to_account_id": tid,
             "to_account_name": tnama,
             "butuh_akun": butuh_akun,
-            "sifat": LABEL_SIFAT.get(tx.get("flow_type"), tx.get("flow_type")),
+            "sifat": sifat,
         })
 
     return {"ok": True, "draft": {
@@ -464,17 +484,35 @@ def simpan(draft_hasil, konfirmasi, path=None, path_log=None):
         kode, pesan = tolak
         return {"ok": False, "error": kode, "message": pesan, "tersimpan": 0}
 
-    if not draft_hasil or not draft_hasil.get("ok"):
+    # Penjaga bentuk draft (kelas cacat sama dengan penjaga tipe konfirmasi di
+    # atas, dan sengaja ditutup di ronde yang sama). `draft_hasil` yang bukan
+    # dict — atau `draft`/`transactions` yang berbentuk salah — dulu melempar
+    # AttributeError/TypeError ke pemanggil, padahal docstring di atas berjanji
+    # tidak melempar untuk penolakan. Fail-closed: kembalikan kode.
+    if not draft_hasil or not isinstance(draft_hasil, dict) \
+            or not draft_hasil.get("ok"):
         return {"ok": False, "error": "draft_tidak_sah",
                 "message": "Draftnya tidak sah atau gagal diurai.", "tersimpan": 0}
 
-    txs = (draft_hasil.get("draft") or {}).get("transactions") or []
+    isi_draft = draft_hasil.get("draft")
+    if isi_draft is not None and not isinstance(isi_draft, dict):
+        return {"ok": False, "error": "draft_tidak_sah",
+                "message": "Isi draft bukan bentuk yang dikenal.", "tersimpan": 0}
+
+    txs = (isi_draft or {}).get("transactions") or []
+    if not isinstance(txs, list):
+        return {"ok": False, "error": "draft_tidak_sah",
+                "message": "Daftar transaksi di draft bukan daftar.", "tersimpan": 0}
     if not txs:
         return {"ok": False, "error": "draft_kosong",
                 "message": "Tidak ada transaksi di draft itu.", "tersimpan": 0}
 
     items = []
     for i, tx in enumerate(txs, 1):
+        if not isinstance(tx, dict):
+            return {"ok": False, "error": "draft_tidak_sah",
+                    "message": "Transaksi ke-%d bukan bentuk yang dikenal." % i,
+                    "tersimpan": 0}
         for f in ("occurred_on", "direction", "amount"):
             if not tx.get(f):
                 return {"ok": False, "error": "field_kurang",

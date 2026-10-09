@@ -4,9 +4,59 @@
 **Tanggal:** 9 Okt 2026
 **Kartu:** `t_0c4c4678`
 **Status:** selesai — semua bukti di bawah dijalankan sungguhan, bukan didesain
-**Revisi:** ronde 4 (9 Okt 2026) — menutup temuan review ronde 4 (normalisasi
+**Revisi:** ronde 5 (9 Okt 2026) — menutup temuan review ronde 4 (field
+konfirmasi non-string melempar exception, bukan kode). Ikut menutup kelas yang
+sama di jalur draft (`draft()`/`simpan()` dengan bentuk salah).
 
-  membuang penanda penolakan → karakter asing kini ditolak, fail-closed)
+---
+
+## Perubahan ronde 5 — bentuk salah dikembalikan sebagai KODE, bukan exception
+
+Review ronde 4 menemukan satu cacat yang **bukan** fail-open (nol baris
+tersimpan), tapi tetap cacat kontrak: `periksa_konfirmasi()` memanggil `.strip()`
+pada field konfirmasi tanpa penjaga tipe, jadi konfirmasi berbentuk salah
+melempar `AttributeError` ke pemanggil — di luar `try/except` `simpan()`. Itu
+bertabrakan dengan docstring `simpan()` sendiri ("Tidak pernah melempar
+exception untuk penolakan: pemanggil harus bisa menampilkan alasannya") dan
+dengan pola yang sudah dipakai `periksa_konfirmasi()` di tingkat atas
+(`isinstance(konfirmasi, dict)` → `konfirmasi_rusak`).
+
+**Reproduksi temuan ronde 4, sebelum → sesudah** (dijalankan ke salinan):
+
+```
+pengirim=1          -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+pengirim=['deny']   -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+teks=12345          -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+teks=['simpan']     -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+kanal=99            -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+kanal=['telegram']  -> CRASH AttributeError    -> kode=konfirmasi_rusak  baris 42
+```
+
+**Kelas yang sama di jalur draft, pada ronde yang sama.** Saya menyisir jalur
+tetangga dengan prinsip yang sama, dan ketemu pintu yang sama masih terbuka:
+`draft()` dengan hasil parser berbentuk salah dan `simpan()` dengan `draft_hasil`
+berbentuk salah juga melempar ke pemanggil.
+
+```
+draft(parse_fn -> list/str/int/None)     -> ok=False (hasil_parser_rusak)
+draft(parse_fn -> draft bukan dict)      -> ok=False (hasil_parser_rusak)
+draft(parse_fn -> transactions bukan list)-> ok=False (hasil_parser_rusak)
+draft(parse_fn -> tx bukan dict)         -> ok=False (hasil_parser_rusak)
+simpan("x"/123)                          -> error=draft_tidak_sah
+simpan({"ok":True,"draft":"x"})          -> error=draft_tidak_sah
+simpan({"ok":True,"draft":{"transactions":5}}) -> error=draft_tidak_sah
+simpan({"ok":True,"draft":{"transactions":["x"]}}) -> error=draft_tidak_sah
+```
+
+Yang **tidak** berubah, supaya kode lama tidak bergeser artinya: field yang
+**hilang** tetap `bukan_deny` / `konfirmasi_kosong` / `kanal_kosong`; draft yang
+sah-tapi-kosong tetap `draft_kosong`; draft yang hilang tetap `draft_tidak_sah`.
+
+**Uji:** `tests/test_chat_gate.py` 143 → **165 pemeriksaan, 0 gagal**. Tambahan
+bagian (b5) 6 bentuk field salah + 3 field hilang, (b6) 6 bentuk parser salah +
+5 bentuk draft salah. Seluruh **15/15** berkas uji lulus. `CONTRACT.md` §18
+diperbarui: baris tabel `konfirmasi_rusak` + sub-bagian "Field konfirmasi
+non-string ditolak — bukan exception". Commit `2864f87`.
 
 ---
 
