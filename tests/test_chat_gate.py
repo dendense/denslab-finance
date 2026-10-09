@@ -294,6 +294,41 @@ for teks_a in ("ya, simpan", "oke simpan", "tolong catat", "simpan", "ya"):
               chat_gate.perintah_diizinkan(teks_a))
 
 
+# ── (b5) FIELD NON-STRING — penolakan berbentuk KODE, bukan exception ───────
+# Ditemukan di review ronde 4 (lensa Kontrak): `.strip()` dipanggil pada field
+# konfirmasi tanpa penjaga tipe, jadi `pengirim=1`, `teks=["simpan"]`, `kanal=99`
+# melempar AttributeError — padahal docstring `simpan()` berjanji "tidak pernah
+# melempar exception untuk penolakan". Bukan fail-open (nol baris tersimpan),
+# tapi cacat kontrak. Regresi ini mengunci: field non-string -> kode
+# `konfirmasi_rusak`, bukan exception.
+print("\n(b5) field konfirmasi non-string — kode penolakan, bukan exception")
+sebelum_tipe = hitung(SALINAN)
+kasus_tipe = [
+    ("pengirim = 1",          {"pengirim": 1, "kanal": "telegram", "teks": "simpan"}),
+    ("pengirim = ['deny']",   {"pengirim": ["deny"], "kanal": "telegram", "teks": "simpan"}),
+    ("teks = 12345",          {"pengirim": "deny", "kanal": "telegram", "teks": 12345}),
+    ("teks = ['simpan']",     {"pengirim": "deny", "kanal": "telegram", "teks": ["simpan"]}),
+    ("kanal = 99",            {"pengirim": "deny", "kanal": 99, "teks": "simpan"}),
+    ("kanal = ['telegram']",  {"pengirim": "deny", "kanal": ["telegram"], "teks": "simpan"}),
+]
+for label_t, konf_t in kasus_tipe:
+    try:
+        h_t = chat_gate.simpan(d, konf_t, path=SALINAN, path_log=LOG)
+        cek("field salah %s -> kode" % label_t, h_t.get("error"), "konfirmasi_rusak")
+    except Exception as e:
+        cek_benar("field salah %s -> kode (lempar %r)" % (label_t, e), False)
+cek("baris salinan TIDAK bertambah setelah semua field salah",
+    hitung(SALINAN), sebelum_tipe)
+
+# Field yang HILANG tetap diberi kode sendiri, bukan `konfirmasi_rusak`.
+for label_m, konf_m, kode_m in (
+        ("pengirim hilang", {"kanal": "telegram", "teks": "simpan"}, "bukan_deny"),
+        ("teks hilang", {"pengirim": "deny", "kanal": "telegram"}, "konfirmasi_kosong"),
+        ("kanal hilang", {"pengirim": "deny", "teks": "simpan"}, "kanal_kosong")):
+    h_m = chat_gate.simpan(d, konf_m, path=SALINAN, path_log=LOG)
+    cek("%s -> kode asli" % label_m, h_m.get("error"), kode_m)
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)

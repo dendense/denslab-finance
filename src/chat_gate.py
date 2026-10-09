@@ -306,14 +306,31 @@ def periksa_konfirmasi(konfirmasi):
         return ("konfirmasi_rusak",
                 "Bentuk konfirmasi tidak dikenal. Draft belum disimpan.")
 
-    pengirim = (konfirmasi.get("pengirim") or "").strip().lower()
+    # Penjaga tipe field (perbaikan review ronde 4, 9 Okt 2026). Sebelum ini
+    # field konfirmasi non-string (`{"pengirim": 1}`, `{"teks": ["simpan"]}`,
+    # `{"kanal": 99}`) membuat `.strip()` melempar AttributeError ke pemanggil —
+    # padahal docstring `simpan()` berjanji "tidak pernah melempar exception
+    # untuk penolakan", dan `periksa_konfirmasi()` sudah memakai pola ini di
+    # tingkat atas (`isinstance(konfirmasi, dict)` -> `konfirmasi_rusak`).
+    # Field yang HILANG tetap bukan `konfirmasi_rusak`: ia punya kode sendiri
+    # (`bukan_deny` / `konfirmasi_kosong` / `kanal_kosong`). Yang ditolak di
+    # sini hanya field yang ADA tapi bukan teks — fail-closed, bukan exception.
+    pengirim_mentah = konfirmasi.get("pengirim")
+    if pengirim_mentah is not None and not isinstance(pengirim_mentah, str):
+        return ("konfirmasi_rusak",
+                "Field 'pengirim' bukan teks. Draft belum disimpan.")
+    pengirim = (pengirim_mentah or "").strip().lower()
     if pengirim != MANUSIA:
         return ("bukan_deny",
                 "Perintah simpan hanya sah kalau datang dari Deny sendiri. "
                 "Yang mengirim ini '%s', bukan Deny. Draft belum disimpan."
                 % (pengirim or "tidak disebutkan"))
 
-    teks = (konfirmasi.get("teks") or "").strip()
+    teks_mentah = konfirmasi.get("teks")
+    if teks_mentah is not None and not isinstance(teks_mentah, str):
+        return ("konfirmasi_rusak",
+                "Field 'teks' bukan teks. Draft belum disimpan.")
+    teks = (teks_mentah or "").strip()
     if not teks:
         return ("konfirmasi_kosong",
                 "Konfirmasi tidak berisi kata apa pun. Draft belum disimpan.")
@@ -388,7 +405,11 @@ def periksa_konfirmasi(konfirmasi):
                 "Aku berhenti — ragu berarti berhenti. Balas \"simpan\" kalau "
                 "memang mau disimpan.")
 
-    kanal = (konfirmasi.get("kanal") or "").strip()
+    kanal_mentah = konfirmasi.get("kanal")
+    if kanal_mentah is not None and not isinstance(kanal_mentah, str):
+        return ("konfirmasi_rusak",
+                "Field 'kanal' bukan teks. Draft belum disimpan.")
+    kanal = (kanal_mentah or "").strip()
     if not kanal:
         return ("kanal_kosong",
                 "Asal chat konfirmasi tidak disebutkan — tidak bisa dilacak. "

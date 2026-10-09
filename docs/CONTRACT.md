@@ -793,6 +793,7 @@ perintah sah** (daftar putih — lihat di bawah).
 | teks memuat karakter non-huruf/angka di luar pemisah netral | `ditolak` | "❌ simpan", "simpan 🔥", "si-mpan" |
 | berbentuk pertanyaan | `pertanyaan` | "simpan?", "apa ya" |
 | `kanal` tidak disebut | `kanal_kosong` | tidak bisa dilacak |
+| field konfirmasi ada tapi bukan teks (`int`, `list`, …) | `konfirmasi_rusak` | `{"pengirim": 1}`, `{"teks": ["simpan"]}`, `{"kanal": 99}` |
 
 **Prinsipnya: ragu = berhenti.** Tidak ada jalur "mungkin benar". Orang yang
 memerintah tidak menyebut namanya sendiri, jadi setiap kalimat yang menyebut
@@ -849,6 +850,24 @@ spasi. Kalau teks masih memuat karakter di luar huruf/angka/spasi,
 `perintah_diizinkan()` mengembalikan **False** — jadi `ya, simpan` tetap lolos,
 tapi `❌ simpan`, `simpan 🔥`, dan `si-mpan` berhenti. Sebuah penanda penolakan
 tidak boleh bisa hilang sebelum gerbang memutuskan.
+
+#### Field konfirmasi non-string ditolak — bukan exception (perbaikan review ronde 4, 9 Okt 2026)
+
+Docstring `simpan()` berjanji *"Tidak pernah melempar exception untuk
+penolakan: pemanggil harus bisa menampilkan alasannya."* Janji itu tadinya
+salah untuk konfirmasi berbentuk salah: `periksa_konfirmasi()` memanggil
+`.strip()` pada `pengirim`/`teks`/`kanal` tanpa penjaga tipe, jadi
+`{"pengirim": 1}`, `{"teks": ["simpan"]}`, dan `{"kanal": 99}` melempar
+`AttributeError` ke pemanggil — di luar `try/except` `simpan()`. Ini bukan
+fail-open (nol baris tersimpan), tapi tetap cacat kontrak: gerbang setingkat
+ini harus memberi **kode** untuk setiap konfirmasi berbentuk salah, persis
+seperti `isinstance(konfirmasi, dict)` → `konfirmasi_rusak` yang sudah dipakai
+di tingkat atas.
+
+Perbaikannya: sebelum `.strip()`, kalau field **ada** tapi bukan `str` →
+`konfirmasi_rusak`. Field yang **hilang** tetap punya kode sendiri
+(`bukan_deny` / `konfirmasi_kosong` / `kanal_kosong`), jadi aturan ini tidak
+melebarkan arti "konfirmasi rusak" ke konfirmasi yang sekadar kurang lengkap.
 
 ### Asal setiap penyimpanan tercatat
 
