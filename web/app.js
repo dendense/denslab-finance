@@ -2781,8 +2781,10 @@ async function refresh() {
       alasannya lengkap di requests/CATATAN-BELUM-SELESAI.md §5b.
    3. Panel ini TIDAK memanggil model untuk sekadar cek lalu lintas. Setiap
       panggilan membakar kuota Deny. Status dibaca dari endpoint ringan
-      /api/ai-status yang disediakan server (belum ada — lihat §5c). Selama
-      endpoint itu belum ada, panel jujur berkata "belum bisa diperiksa".
+      /api/ai-status yang disediakan server — SUDAH ADA sejak monica
+      menambahkannya (commit df19e56, didokumentasikan di CONTRACT.md §17).
+      404 hanya muncul kalau server-nya versi lama; panel lalu jujur berkata
+      "belum bisa diperiksa" — itu jalur cadangan, bukan keadaan normal.
 */
 const AI_HOST = () => $('ai-host');
 

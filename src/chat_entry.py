@@ -59,8 +59,11 @@ Aturan WAJIB:
 def parse(text):
     """Kirim ke model, kembalikan dict hasil parse.
 
-    stream WAJIB true: 9router membalas HTTP 200 dengan content KOSONG saat
-    stream=false untuk model-model ini (bug yang sama dengan jalur visi).
+    stream WAJIB true. Alasannya: ROUTER membalas HTTP 200 dengan content
+    KOSONG saat stream=false untuk model-model ini (bug yang sama dengan jalur
+    visi). Default sekarang Kenari LANGSUNG (lihat `model_config.BASE`), tapi
+    NINE_ROUTER_BASE bisa menunjuk router lokal — dan router apa pun yang
+    dipakai tetap punya sifat ini. Jadi jangan set stream=false.
     """
     key = os.environ.get("NINE_ROUTER_API_KEY", "").strip()
     if not key:
