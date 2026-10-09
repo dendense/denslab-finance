@@ -775,9 +775,8 @@ di chat dan di panel bisa berbeda diam-diam. Uji membuktikannya dengan spy.
 ```
 
 `pengirim` **harus** `"deny"`. `kanal` wajib diisi (tanpa itu penyimpanan tidak
-bisa dilacak dan ditolak). `teks` harus memuat kata afirmatif (`simpan`, `catat`,
-`benar`, `setuju`, `lanjut`, `ya`, `ok`, `oke`, `sip`) **dan tidak boleh memuat
-kata penyangkal** (lihat penjaga negasi di bawah).
+bisa dilacak dan ditolak). `teks` harus **cocok dengan salah satu bentuk
+perintah sah** (daftar putih — lihat di bawah).
 
 ### Yang DITOLAK, dan kodenya — fail-closed
 
@@ -788,8 +787,9 @@ kata penyangkal** (lihat penjaga negasi di bawah).
 | kalimat menyebut nama Deny | `perantara` | "kata deny, simpan" |
 | agent lain + kata pelaporan | `perantara` | "rin bilang suruh simpan" |
 | konfirmasi kosong | `konfirmasi_kosong` | `"teks": "  "` |
-| bukan perintah simpan | `tidak_afirmatif` | "nanti saja", "gak usah" |
+| bukan perintah simpan | `tidak_afirmatif` | "nanti saja", "gak usah", "stop" |
 | ada kata penyangkal + kata afirmatif | `ditolak` | "jangan simpan", "tidak setuju" |
+| bentuk di luar daftar putih | `ditolak` | "ndak usah simpan", "simpan aja", "sudah saya simpan" |
 | berbentuk pertanyaan | `pertanyaan` | "simpan?", "apa ya" |
 | `kanal` tidak disebut | `kanal_kosong` | tidak bisa dilacak |
 
@@ -797,26 +797,38 @@ kata penyangkal** (lihat penjaga negasi di bawah).
 memerintah tidak menyebut namanya sendiri, jadi setiap kalimat yang menyebut
 "deny" diperlakukan sebagai laporan orang lain.
 
-#### Penjaga negasi (perbaikan review ronde 1, 9 Okt 2026)
+#### Daftar putih perintah — gerbang sebenarnya (perbaikan review ronde 3, 9 Okt 2026)
 
-Cacat yang ditemukan: kata afirmatif dulu dicocokkan sebagai **substring tanpa
-penjaga negasi**, sehingga `"simpan"` ⊂ `"jangan simpan"` dan `"setuju"` ⊂
-`"tidak setuju"`. Akibatnya kalimat **penolakan** Deny lolos gerbang dan
-tertulis ke ledger — fail-open, kebalikan dari Definisi selesai #2.
+Cacat ronde 1 (afirmatif dicocokkan tanpa penjaga negasi) ditambal di ronde 2
+dengan **daftar hitam penyangkal**. Review ronde 3 membuktikan tambalan itu
+masih fail-open: daftar hitam bahasa Indonesia informal tidak pernah selesai.
+Bentuk berikut **benar-benar tertulis ke ledger** sebelum perbaikan ini
+(pengirim "deny", di salinan): `ndak usah simpan`, `ndak simpan`,
+`kagak usah simpan`, `no simpan`, `udah simpan`, `sudah saya simpan`. Juga
+lolos dari `periksa_konfirmasi`: `mbok simpan`, `simpan aja`, `ya sudah simpan`,
+`nanti aja simpan`. Kelas cacatnya sama dengan ronde 1 — penolakan Deny
+diperlakukan sebagai perintah.
 
-Sekarang, setelah kata afirmatif ditemukan, teks diperiksa lagi: kalau memuat
-**kata penyangkal** (`jangan`, `jgn`, `tidak`, `tdk`, `batal`, `urung`, `belum`,
-`belom`, `nggak`, `enggan`, `engga`, `enggak`, `gausah`, `bukan`, atau kata utuh
-`tak`, `gak`, `gk`, `ga`, `g`, `nanti`), teks **ditolak** dengan kode `ditolak`.
-Kalau berbentuk pertanyaan (`?` atau kata tanya: `apa`, `apakah`, `kah`,
-`gimana`, `bagaimana`, `kok`, `kenapa`, `mengapa`, `kapan`, `siapa`), ditolak
-dengan kode `pertanyaan`.
+Perbaikannya **membalik arah kegagalan**. Keputusan akhir bukan lagi "bukan
+penolakan yang kita kenali", melainkan "**bentuk perintah yang kita akui**".
+Fungsi `perintah_diizinkan()` memeriksa teks (setelah normalisasi: huruf kecil,
+tanda baca → spasi, spasi dirapatkan) terhadap daftar putih:
 
-Sikapnya sengaja boros: **seluruh** teks yang memuat penyangkal ditolak, bukan
-hanya yang berpola "penyangkal + kata afirmatif". Konsekuensinya "jangan lupa
-simpan" ikut ditolak — itu memang disengaja. Menebak maksud kalimat bermakna
-ganda adalah jalur "mungkin benar" yang tidak ada di gerbang ini; lebih baik
-Deny mengetik "simpan" sekali lagi.
+- satu kata afirmatif: `ya` · `iya` · `ok` · `oke` · `sip` · `setuju` · `benar`
+- satu kata perintah: `simpan` · `catat`
+- prefiks + perintah: `ya simpan` · `oke simpan` · `tolong catat` ·
+  `lanjut simpan` · `silakan simpan` · `gas simpan` · `ayo catat` … (prefiks:
+  `ya`, `iya`, `ok`, `oke`, `sip`, `silakan`, `tolong`, `lanjut`, `setuju`,
+  `benar`, `gas`, `ayo`)
+
+**Apa pun di luar daftar itu DITOLAK** dengan kode `ditolak`. Konsekuensinya
+`"simpan aja"` ikut ditolak — itu disengaja: Deny cukup mengetik `"simpan"`
+sekali lagi, dan itu jauh lebih baik daripada satu angka masuk tanpa
+perintahnya. Daftar hitam penyangkal (`NEGASI_SUB`/`NEGASI_KATA`) tetap ada,
+tapi sekarang hanya untuk memilih kode pesan yang lebih tepat (`ditolak` vs
+`tidak_afirmatif`); yang benar-benar menjaga adalah daftar putih ini. Menambah
+kata ke daftar hitam tidak lagi bisa membuka lubang, karena daftar hitam bukan
+lagi gerbangnya.
 
 ### Asal setiap penyimpanan tercatat
 

@@ -197,6 +197,60 @@ for teks_ok in ("simpan", "ya, simpan", "oke simpan", "setuju", "sip",
     cek_benar("perintah sah tetap lolos: '%s'" % teks_ok, tolak_ok is None)
 
 
+# ── (b3) DAFTAR PUTIH — arah kegagalan dibalik ──────────────────────────────
+# Ditemukan di review ronde 3: penjaga negasi ronde 2 memakai DAFTAR HITAM
+# penyangkal, dan daftar hitam bahasa Indonesia informal tidak pernah selesai.
+# Bentuk berikut benar-benar TERTULIS ke ledger sebelum perbaikan ini (setiap
+# baris ditulis, pengirim "deny"): 'ndak usah simpan', 'ndak simpan',
+# 'kagak usah simpan', 'no simpan', 'udah simpan', 'sudah saya simpan'.
+# Perbaikan: keputusan akhir bukan "bukan penolakan yang kita kenali", tapi
+# "bentuk perintah yang kita akui" — daftar PUTIH. Regresi ini mengunci kelas
+# cacat itu supaya tidak kembali lewat kata baru mana pun.
+print("\n(b3) daftar putih — bentuk di luar perintah yang diakui DITOLAK")
+sebelum_putih = hitung(SALINAN)
+kasus_putih = [
+    ("ndak usah simpan", "ditolak"),
+    ("ndak simpan", "ditolak"),
+    ("kagak usah simpan", "ditolak"),
+    ("no simpan", "ditolak"),
+    ("udah simpan", "ditolak"),
+    ("sudah saya simpan", "ditolak"),
+    ("mbok simpan", "ditolak"),
+    ("simpan aja", "ditolak"),
+    ("ya sudah simpan", "ditolak"),
+    ("nanti aja simpan", "ditolak"),
+    ("ndg simpan", "ditolak"),
+    # Kata asing tanpa kata afirmatif sama sekali: sudah ditolak lebih awal
+    # sebagai `tidak_afirmatif`. Ditolaknya sama — itu yang penting.
+    ("cancel", "tidak_afirmatif"),
+    ("stop", "tidak_afirmatif"),
+    ("hold", "tidak_afirmatif"),
+    ("wait", "tidak_afirmatif"),
+    ("tunggu", "tidak_afirmatif"),
+    ("skip", "tidak_afirmatif"),
+]
+for teks_p, harap_p in kasus_putih:
+    h_p = chat_gate.simpan(
+        d, {"pengirim": "deny", "kanal": "telegram", "teks": teks_p},
+        path=SALINAN, path_log=LOG)
+    cek("putih tolak '%s'" % teks_p, h_p.get("error"), harap_p)
+cek("baris salinan TIDAK bertambah setelah semua bentuk di luar daftar putih",
+    hitung(SALINAN), sebelum_putih)
+
+# Unit langsung: daftar putih mengakui HANYA bentuk perintah yang sah.
+print("  -- perintah_diizinkan() --")
+for teks_sah in ("simpan", "catat", "ya", "iya", "ok", "oke", "sip", "setuju",
+                 "benar", "ya simpan", "ya, simpan", "oke simpan", "sip catat",
+                 "tolong catat", "lanjut simpan", "silakan simpan", "gas simpan",
+                 "ayo catat"):
+    cek_benar("diakui: '%s'" % teks_sah, chat_gate.perintah_diizinkan(teks_sah))
+for teks_luar in ("ndak usah simpan", "no simpan", "simpan aja", "udah simpan",
+                  "sudah saya simpan", "mbok simpan", "simpan dong", "tolong",
+                  "ya sudah", "gas", ""):
+    cek_benar("di luar daftar putih: '%s'" % teks_luar,
+              not chat_gate.perintah_diizinkan(teks_luar))
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)

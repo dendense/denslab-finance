@@ -68,7 +68,7 @@ KATA_LAPOR = ("bilang", "berkata", "kata ", "suruh", "menyuruh", "menyampaikan",
 # sebagai substring ("disimpan" ikut), yang pendek wajib kata utuh — supaya
 # "yang" tidak lolos hanya karena memuat "ya".
 AFIRMASI_SUB = ("simpan", "catat", "benar", "setuju", "lanjut")
-AFIRMASI_KATA = ("ya", "ok", "oke", "sip")
+AFIRMASI_KATA = ("ya", "iya", "ok", "oke", "sip")
 
 # Kata PENYANGKAL. Kalau salah satu muncul, teksnya bukan perintah simpan —
 # bisa jadi penolakan ("jangan simpan") atau penundaan ("nanti simpan").
@@ -76,11 +76,12 @@ AFIRMASI_KATA = ("ya", "ok", "oke", "sip")
 # jadi kalimat PENOLAKAN Deny lolos gerbang dan tertulis ke ledger — fail-open,
 # persis yang dilarang Definisi selesai #2 ("ragu → berhenti").
 #
-# Sikapnya sengaja boros: SELURUH teks yang memuat penyangkal ditolak, bukan
-# hanya yang berpola "penyangkal + kata afirmatif". Lebih baik Deny mengetik
-# "simpan" sekali lagi daripada satu angka masuk tanpa perintahnya. Ini juga
-# berarti "jangan lupa simpan" ikut ditolak — itu memang disengaja: menebak
-# maksud kalimat bermakna ganda adalah jalur "mungkin benar" yang tidak ada.
+# PENTING (review ronde 3): daftar ini BUKAN gerbangnya. Daftar hitam bahasa
+# Indonesia informal tidak pernah selesai — 'ndak', 'kagak', 'mbok', 'udah',
+# 'no' semuanya pernah lolos. Yang benar-benar menjaga adalah DAFTAR PUTIH di
+# `perintah_diizinkan()`: hanya bentuk perintah yang diakui yang lolos, sisanya
+# berhenti. Daftar penyangkal ini sekarang hanya memilih kode pesan yang lebih
+# tepat (`ditolak` vs `tidak_afirmatif`).
 NEGASI_SUB = ("jangan", "jgn", "tidak", "tdk", "batal", "urung", "belum",
               "belom", "nggak", "enggan", "engga", "enggak", "gausah", "bukan")
 NEGASI_KATA = ("tak", "gak", "gk", "ga", "g", "nanti")
@@ -90,6 +91,51 @@ NEGASI_KATA = ("tak", "gak", "gk", "ga", "g", "nanti")
 # supaya "siapa" tidak tertangkap oleh "apa".
 KATA_TANYA = ("apa", "apakah", "kah", "gimana", "bagaimana", "kok", "kenapa",
               "mengapa", "kapan", "siapa")
+
+# ── Daftar PUTIH perintah simpan — ini GERBANG SEBENARNYA ────────────────────
+# Perbaikan review ronde 3 (9 Okt 2026). Penjaga negasi di atas memakai DAFTAR
+# HITAM penyangkal, dan daftar hitam bahasa Indonesia informal tidak pernah
+# selesai: 'ndak', 'kagak', 'mbok', 'udah', 'no', 'udah', 'sudah' ... setiap
+# kata baru yang lolos adalah satu angka yang bisa masuk tanpa perintah Deny —
+# kelas cacat yang sama dengan ronde 1 (penolakan diperlakukan sebagai
+# perintah). Karena itu arah kegagalannya DIBALIK: bukan "kecualikan penolakan
+# yang kita kenali", melainkan "izinkan hanya perintah yang kita akui, sisanya
+# berhenti". Daftar hitam di atas tetap ada, tapi sekarang hanya untuk memilih
+# kode pesan yang lebih tepat — yang menjaga adalah daftar putih ini.
+#
+# Bentuk sah, setelah normalisasi (huruf kecil, tanda baca dibuang, spasi
+# dirapatkan):
+#   * satu kata afirmatif:  ya · iya · ok · oke · sip · setuju · benar
+#   * satu kata perintah:   simpan · catat
+#   * prefiks + perintah:   "ya simpan" · "oke simpan" · "tolong catat" ·
+#                           "lanjut simpan" · "silakan simpan" ...
+# Di luar itu DITOLAK fail-closed. "simpan aja" ikut ditolak — Deny cukup
+# mengetik "simpan" sekali lagi, dan itu jauh lebih baik daripada satu angka
+# masuk tanpa perintahnya.
+PERINTAH_KATA = ("simpan", "catat")
+AFIRMASI_TUNGGAL = ("ya", "iya", "ok", "oke", "sip", "setuju", "benar")
+PREFIKS_PERINTAH = ("ya", "iya", "ok", "oke", "sip", "silakan", "tolong",
+                    "lanjut", "setuju", "benar", "gas", "ayo")
+
+
+def _normalisasi_perintah(teks):
+    """Huruf kecil, tanda baca -> spasi, spasi dirapatkan. 'ya, simpan' -> 'ya simpan'."""
+    t = re.sub(r"[^\w\s]+", " ", teks.lower())
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def perintah_diizinkan(teks):
+    """True HANYA kalau teks cocok persis salah satu bentuk perintah sah.
+
+    Ini gerbang fail-closed: apa pun yang tidak diakui di sini berhenti.
+    """
+    kata = _normalisasi_perintah(teks).split()
+    if len(kata) == 1:
+        return kata[0] in AFIRMASI_TUNGGAL or kata[0] in PERINTAH_KATA
+    if len(kata) == 2:
+        return kata[0] in PREFIKS_PERINTAH and kata[1] in PERINTAH_KATA
+    return False
+
 
 LABEL_SIFAT = {
     "expense": "Pengeluaran",
@@ -271,6 +317,12 @@ def periksa_konfirmasi(konfirmasi):
     # penyangkal menang. Ditaruh setelah cek afirmatif supaya teks tanpa
     # perintah sama sekali ("nanti saja") tetap diberi kode `tidak_afirmatif`
     # yang lebih tepat, bukan `ditolak`.
+    #
+    # CATATAN (ronde 3): penjaga ini sekarang HANYA memilih kode pesan yang
+    # lebih tepat. Yang benar-benar menjaga adalah daftar putih di bawah —
+    # lihat `perintah_diizinkan()`. Daftar hitam penyangkal tidak pernah
+    # lengkap ('ndak', 'kagak', 'udah', 'no' ...), jadi ia tidak boleh jadi
+    # gerbang; kalau ia yang jadi gerbang, bentuk yang tidak terdaftar lolos.
     if (any(k in rendah for k in NEGASI_SUB)
             or any(re.search(r"\b%s\b" % re.escape(k), rendah)
                    for k in NEGASI_KATA)):
@@ -288,6 +340,20 @@ def periksa_konfirmasi(konfirmasi):
         return ("pertanyaan",
                 "Kalimat itu berbentuk pertanyaan, bukan perintah simpan. "
                 "Aku berhenti. Balas \"simpan\" kalau memang mau disimpan.")
+
+    # ── GERBANG SEBENARNYA: daftar putih ────────────────────────────────────
+    # Sampai sini teks sudah memuat kata afirmatif, tidak memuat penyangkal
+    # yang kita kenal, dan bukan pertanyaan. Itu BELUM cukup: daftar hitam di
+    # atas selalu bisa bocor ('ndak usah simpan', 'no simpan', 'sudah saya
+    # simpan' — semuanya memuat "simpan" dan tidak memuat penyangkal
+    # terdaftar). Jadi keputusan akhirnya bukan "bukan penolakan", melainkan
+    # "bentuk perintah yang diakui". Apa pun di luar daftar putih berhenti.
+    if not perintah_diizinkan(teks):
+        return ("ditolak",
+                "Kalimat itu bukan salah satu bentuk perintah simpan yang "
+                "diakui (mis. \"simpan\", \"ya simpan\", \"tolong catat\"). "
+                "Aku berhenti — ragu berarti berhenti. Balas \"simpan\" kalau "
+                "memang mau disimpan.")
 
     kanal = (konfirmasi.get("kanal") or "").strip()
     if not kanal:
