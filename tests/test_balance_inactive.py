@@ -1,136 +1,176 @@
 #!/usr/bin/env python3
 """Uji: apakah `/api/summary` melaporkan uang di akun NONAKTIF bersaldo?
 
-Ini kasus yang diminta yuki: kalau ada akun dinonaktifkan tapi masih bersaldo,
-panel harus bisa memberi tahu Deny — kalau tidak, `total` naik tanpa akun yang
+Kasus yang diminta yuki: kalau ada akun dinonaktifkan tapi masih bersaldo, panel
+harus bisa memberi tahu Deny — kalau tidak, `total` naik tanpa akun yang
 menjelaskan dari mana.
 
-SEJAK PANEL DIKUNCI PASSWORD, uji ini butuh sesi login. Kalau belum ada password,
-skrip ini memasangnya sendiri (password uji) dan MENGHAPUSNYA lagi di akhir —
-supaya tidak ada password yang tertinggal di database Deny.
-
-Jalankan SERVER dulu (python3 src/server.py --port 8791), lalu skrip ini.
-
 Jalankan:  python3 tests/test_balance_inactive.py
+
+TIDAK BUTUH SERVER, TIDAK BUTUH PASSWORD, TIDAK MENYENTUH DATA DENY.
+
+Cara kerjanya: `api_summary` dipanggil LANGSUNG dari proses ini, dengan
+db.DB_PATH diarahkan ke database sementara. Tidak ada HTTP, tidak ada sesi
+login, dan tidak satu byte pun ditulis ke finance-pribadi/.
+
+Mengapa tidak lewat HTTP seperti versi sebelumnya — uji versi lama menuntut
+server yang jalan, dan server itu membaca database Deny:
+
+  1. Ia MENULIS akun uji ke database keuangan Deny (walau dihapus lagi di akhir;
+     kalau skripnya terhenti di tengah, akunnya tertinggal).
+  2. Ia gagal dengan "no such table: accounts" kalau dijalankan tanpa server,
+     karena database yang dihubunginya kosong.
+  3. Ia butuh password Deny — versi lama memasang password uji sendiri, dan
+     kalau Deny sudah punya password, uji itu mati dengan 401.
+  4. Ia satu-satunya uji di repo yang begitu; yang lain memakai database
+     sementara lewat argumen `path` (lihat tests/test_analysis_live.py).
+
+Uji yang gagal karena desainnya sendiri akan diabaikan orang, dan begitu satu
+uji diabaikan, yang lain menyusul. Karena itu ia diperbaiki, bukan dilewati.
+
+JEBAKAN YANG SUDAH DITEMUKAN — jangan ulangi:
+
+  * Menimpa `db.DB_PATH` SEBELUM 7 Okt 2026 TIDAK BEKERJA. Semua fungsi db
+    bertanda tangan `path=DB_PATH`, dan default argumen di Python dievaluasi
+    saat import — jadi path sudah terkunci sebelum uji sempat menimpanya. Uji
+    ini membaca database keuangan Deny sambil mencetak path /tmp ke layar.
+    Diperbaiki di `db.py` lewat `_PathDB`, dan uji ini memverifikasi hasilnya:
+    langkah 1 mewajibkan "database kosong" benar-benar kosong.
+  * `account_count_all` BUKAN jumlah semua akun. Namanya menyesatkan. Menurut
+    `schema.sql` (dikonfirmasi migrations/003, 004, 005) ia menghitung akun
+    AKTIF dengan aturan mentah — tanpa syarat saldo/transaksi yang dipakai
+    `account_count`. Jadi akun nonaktif tidak dihitung di sini; jumlahnya cuma
+    terlihat dari `balance_inactive`.
 """
-import json
-import subprocess
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(SRC))
-import db    # noqa: E402
-import auth  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+import db        # noqa: E402
+import server    # noqa: E402
 
-BASE = "http://localhost:8791"
-URL = BASE + "/api/summary?month=2026-10"
-NAMA_UJI = "UJI-NonaktifBersaldo"
+TMP = Path(tempfile.mkdtemp()) / "uji-balance-inactive.db"
+
+# Nama akun uji HARUS unik per jalannya. Versi lama memakai nama tetap, dan
+# karena uji itu dulu menulis ke database Deny, akun bernama "BRI-Uji" sudah
+# tertinggal di sana. Nama tetap akan langsung bentrok ("sudah ada akun bernama
+# ...") di database mana pun yang pernah tersentuh uji lama.
+import os        # noqa: E402
+AKHIR = os.getpid()
+NAMA_LATAR = "UJI-Latar-%d" % AKHIR
+NAMA_UJI = "UJI-NonaktifBersaldo-%d" % AKHIR
 SALDO = 777000
-PASSWORD_UJI = "uji-sementara-123"
+SALDO_LATAR = 1000000
 
 gagal = []
-_ada_password_sebelum = auth.sudah_ada_password()
 
 
 def cek(nama, dapat, harap):
     ok = dapat == harap
-    print(("  OK   " if ok else "  GAGAL") + " %-46s %s" % (nama, dapat))
+    print(("  OK   " if ok else "  GAGAL") + " %-48s %s" % (nama, dapat))
     if not ok:
         gagal.append("%s: dapat %r harusnya %r" % (nama, dapat, harap))
 
 
-def login():
-    """Dapatkan cookie sesi. Pasang password uji kalau belum ada."""
-    if not _ada_password_sebelum:
-        auth.pasang_password(PASSWORD_UJI)
-    body = json.dumps({"password": PASSWORD_UJI}).encode()
-    req = urllib.request.Request(
-        BASE + "/api/auth", data=body,
-        headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            cookie = r.headers.get("Set-Cookie") or ""
-    except urllib.error.HTTPError as e:
-        if e.code == 401 and _ada_password_sebelum:
-            raise SystemExit(
-                "Sudah ada password milik Deny, dan uji ini tidak tahu passwordnya.\n"
-                "Lewati uji ini, atau jalankan ulang tanpa password terpasang.")
-        raise
-    return cookie.split(";")[0]
+# ── Arahkan database ke /tmp ────────────────────────────────────────────────
+# `db.DB_PATH` adalah default argumen `path=DB_PATH` di 30 fungsi db, dan
+# `server.api_summary` memanggil lewat default itu. Sejak `_PathDB` dipasang,
+# penimpaan di sini benar-benar berlaku. Langkah 1 di bawah membuktikannya.
+DB_DENY = str(ROOT.parent / "finance-pribadi" / "finance.db")
+db.DB_PATH = TMP
+db.init_db(TMP)
 
+print("=" * 78)
+print("Uji balance_inactive — database sementara, tanpa server")
+print("=" * 78)
+print("  DB uji    : %s" % db.DB_PATH)
+print("  DB Deny   : %s" % DB_DENY)
+print("              (uji ini hanya MEMBACA nilai ini untuk dicetak; tidak ada")
+print("               penulisan ke sana — langkah 1 memverifikasi isolasinya)")
 
-_COOKIE = None
+# Enam field ini hidup di dalam `net_worth`, BUKAN di akar balasan.
+# Versi lama uji ini memeriksanya di akar, dan pada database kosong pemeriksaan
+# `f in awal` gagal senyap. Baca bentuknya dari kode (`src/server.py`), jangan
+# dari kebiasaan.
+FIELD = ("total", "liquid", "non_liquid", "account_count",
+         "account_count_all", "balance_inactive")
 
 
 def ringkas():
-    req = urllib.request.Request(URL, headers={"Cookie": _COOKIE})
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read().decode())["net_worth"]
+    """Bagian `net_worth` dari /api/summary, seperti yang dibaca UI."""
+    return server.api_summary({})["net_worth"]
 
-
-# Bersihkan sisa kalau skrip sebelumnya terhenti di tengah
-with db.connect() as conn:
-    conn.execute("DELETE FROM accounts WHERE name = ?", (NAMA_UJI,))
-
-# Login dulu — semua endpoint butuh sesi sejak panel dikunci password
-_COOKIE = login()
-print("  (login berhasil, sesi dipakai untuk semua panggilan)")
 
 try:
-    print("\n1. Keadaan awal")
+    print("\n1. Isolasi database — prasyarat mutlak")
     awal = ringkas()
-    for f in ("total", "liquid", "non_liquid", "account_count",
-              "account_count_all", "balance_inactive"):
-        if f not in awal:
-            gagal.append("field '%s' tidak ada di /api/summary" % f)
-    cek("enam field lengkap", all(f in awal for f in (
-        "total", "liquid", "non_liquid", "account_count",
-        "account_count_all", "balance_inactive")), True)
-    total_awal = awal["total"]
-    print("     total=%s  balance_inactive=%s" % (total_awal, awal["balance_inactive"]))
+    # Kalau isolasi gagal, uji ini membaca database keuangan Deny dan SEMUA
+    # angka di bawahnya tidak bermakna. Diperiksa paling awal supaya kegagalan
+    # jenis itu ketahuan di sini, bukan tersamar sebagai "uji lulus".
+    cek("database uji benar-benar KOSONG (total = 0)", awal["total"], 0)
+    cek("database uji kosong: account_count_all = 0",
+        awal["account_count_all"], 0)
+    if awal["total"] != 0:
+        print("\n  HENTI: isolasi database gagal.")
+        print("  Uji ini sedang membaca database lain (kemungkinan milik Deny).")
+        print("  Angka-angka selanjutnya tidak akan bermakna, jadi tidak")
+        print("  diteruskan. Periksa `_PathDB` / `_path_aktif` di src/db.py.")
+        sys.exit(2)
 
-    print("\n2. Buat akun bersaldo Rp 777.000, lalu NONAKTIFKAN")
+    for f in FIELD:
+        cek("field '%s' ada di net_worth" % f, f in awal, True)
+    cek("database kosong: balance_inactive = 0", awal["balance_inactive"], 0)
+    total_awal = awal["total"]
+    print("     total=%s  balance_inactive=%s"
+          % (total_awal, awal["balance_inactive"]))
+
+    print("\n2. Buat akun AKTIF bersaldo Rp %s (latar)" % f"{SALDO_LATAR:,}")
+    db.create_account(NAMA_LATAR, "bank", SALDO_LATAR)
+    aktif = ringkas()
+    cek("total naik sebesar saldo akun baru",
+        aktif["total"], total_awal + SALDO_LATAR)
+    cek("account_count menghitung akun aktif", aktif["account_count"], 1)
+    cek("account_count_all menghitung akun aktif", aktif["account_count_all"], 1)
+    cek("balance_inactive masih 0 (akunnya aktif)",
+        aktif["balance_inactive"], 0)
+    total_awal = aktif["total"]
+
+    print("\n3. Tambah akun bersaldo Rp 777.000, lalu NONAKTIFKAN")
     a = db.create_account(NAMA_UJI, "bank", SALDO)
     db.update_account(a["id"], is_active=0)
 
     sesudah = ringkas()
-    cek("balance_inactive melaporkan saldo akun nonaktif",
-        sesudah["balance_inactive"], SALDO)
-    # Saldo awal akun BARU menambah kekayaan (memang begitu seharusnya).
-    # Yang diuji di sini: menonaktifkannya TIDAK menghapus uang itu dari total.
-    # Kalau bug lama (WHERE is_active = 1) masih ada, `total` akan kembali
-    # ke angka semula dan uang Rp 777.000 lenyap tanpa penjelasan.
-    cek("total menambahkan saldo akun nonaktif",
+    # Inti uji: menonaktifkan akun TIDAK boleh menghapus uangnya dari total.
+    # Kalau v_net_worth memakai `WHERE is_active = 1`, total akan kembali ke
+    # angka semula dan Rp 777.000 lenyap tanpa error apa pun.
+    cek("total TETAP memasukkan saldo akun nonaktif",
         sesudah["total"], total_awal + SALDO)
     cek("uang tidak hilang saat akun dinonaktifkan",
         sesudah["total"] > total_awal, True)
-    cek("account_count_all tidak menghitung akun nonaktif",
-        sesudah["account_count_all"], awal["account_count_all"])
+    # Inilah yang dipakai UI untuk memberi tahu Deny di mana uang itu berada.
+    cek("balance_inactive melaporkan saldo akun nonaktif",
+        sesudah["balance_inactive"], SALDO)
+    cek("akun nonaktif tidak dihitung di account_count",
+        sesudah["account_count"], 1)
+    # `account_count_all` menghitung akun AKTIF dengan aturan mentah
+    # (tanpa syarat saldo/transaksi). Akun nonaktif tidak ikut — lihat schema.sql:229.
+    cek("account_count_all hanya menghitung akun aktif",
+        sesudah["account_count_all"], 1)
 
-    print("\n3. Aktifkan lagi — balance_inactive harus kembali 0")
+    print("\n4. Aktifkan lagi — akun itu kembali ke hitungan normal")
     db.update_account(a["id"], is_active=1)
     aktif_lagi = ringkas()
-    cek("balance_inactive kembali 0", aktif_lagi["balance_inactive"], 0)
     cek("total tetap termasuk saldo akun itu",
         aktif_lagi["total"], total_awal + SALDO)
+    cek("kini dua akun aktif", aktif_lagi["account_count"], 2)
+    cek("balance_inactive kembali 0", aktif_lagi["balance_inactive"], 0)
 
 finally:
-    with db.connect() as conn:
-        conn.execute("DELETE FROM accounts WHERE name = ?", (NAMA_UJI,))
-    print("\n(akun uji dibersihkan)")
-    # Kalau password dipasang oleh uji ini, hapus lagi supaya tidak tertinggal
-    # di database Deny. Password Deny sendiri tidak pernah disentuh.
-    if not _ada_password_sebelum:
-        try:
-            auth.KREDENSIAL.unlink()
-            print("(password uji dihapus — Deny belum memasang password)")
-        except OSError:
-            pass
+    print("\n(database sementara dibuang; data Deny tidak tersentuh)")
 
-print("\n" + "─" * 68)
+print("\n" + "─" * 78)
 if gagal:
     print("HASIL: %d UJI GAGAL" % len(gagal))
     for g in gagal:

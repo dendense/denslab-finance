@@ -34,6 +34,7 @@ from pathlib import Path
 #   - arsip lain (mis. komputer kedua) bisa menunjuk ke tempat berbeda
 #   - uji bisa mengarahkan ke database sementara tanpa menyentuh data asli
 import os
+import sys
 
 SRC_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SRC_DIR.parent
@@ -42,7 +43,108 @@ REPO_DIR = ROOT_DIR
 # Folder data: dari env, atau default di samping repo.
 DATA_DIR = Path(os.environ.get("FINANCE_DATA")
                 or (REPO_DIR.parent / "finance-pribadi"))
-DB_PATH = DATA_DIR / "finance.db"
+
+
+class _PathDB(str):
+    """Path database yang MEMBACA `DB_PATH` terkini setiap kali dipakai.
+
+    Kenapa ini ada — kejadian nyata, 7 Okt 2026:
+
+    Seluruh fungsi di modul ini bertanda tangan `def f(..., path=DB_PATH)`.
+    Default argumen di Python dievaluasi **sekali, saat fungsi didefinisikan** —
+    jadi `path` sudah terkunci ke database saat import, dan menimpa `db.DB_PATH`
+    SETELAH import tidak mengubah apa pun.
+
+    Akibatnya nyata dan berbahaya: `tests/test_balance_inactive.py` mengarahkan
+    `db.DB_PATH` ke database sementara di /tmp, MENCETAK path /tmp itu ke layar,
+    lalu diam-diam membaca dan menulis ke database keuangan Deny. Ujinya
+    berbohong tentang apa yang sedang diujinya — dan itu lebih buruk daripada
+    uji yang gagal, karena tidak ada yang tahu ada yang salah.
+
+    Dengan kelas ini, `path=DB_PATH` tetap apa adanya di 30 fungsi, tapi nilainya
+    adalah objek yang menanyakan `DB_PATH` global saat dibutuhkan. Menimpa
+    `db.DB_PATH = <path baru>` langsung berlaku untuk semua fungsi.
+    """
+
+    def __new__(cls, ambil):
+        obj = super().__new__(cls, str(ambil()))
+        obj._ambil = ambil
+        return obj
+
+    def _nilai(self):
+        return str(self._ambil())
+
+    # str-nya selalu mengikuti DB_PATH terkini
+    def __str__(self):
+        return self._nilai()
+
+    def __fspath__(self):
+        return self._nilai()
+
+    def __repr__(self):
+        return "_PathDB(%r)" % self._nilai()
+
+    # Sifat-sifat Path yang dipakai kode ini (`.parent`, `.name`, `/.exists()`)
+    def __getattr__(self, nama):
+        n = self._nilai()
+        # Path lebih benar untuk atribut seperti .parent (harus Path, bukan str)
+        return getattr(Path(n), nama)
+
+    # Operasi path: serahkan ke Path supaya hasilnya juga Path yang benar
+    def __truediv__(self, lain):
+        return Path(self._nilai()) / lain
+
+    def exists(self):
+        return Path(self._nilai()).exists()
+
+    def __eq__(self, lain):
+        return self._nilai() == str(lain)
+
+    def __ne__(self, lain):
+        return not self.__eq__(lain)
+
+    def __hash__(self):
+        return hash(str(self))
+
+
+# `DB_PATH` adalah `_PathDB` yang menanyakan nilainya SAAT DIPAKAI, bukan saat
+# import. Yang ditanyakan adalah atribut `DB_PATH` pada modul ini sendiri —
+# kalau uji menimpa `db.DB_PATH = <path>`, ke-30 fungsi `path=DB_PATH` langsung
+# ikut berubah.
+def _nilai_db_path():
+    """Baca `DB_PATH` dari modul ini (bukan dari variabel tertutup).
+
+    Ini penting: kalau `_PathDB` menutup sebuah variabel lokal, menimpa
+    `db.DB_PATH` akan mengganti nama di modul tanpa mengubah variabel tersebut —
+    dan fungsi-fungsi `path=DB_PATH` akan diam-diam memakai path lama. Persis
+    kegagalan yang membuat `tests/test_balance_inactive.py` menulis ke database
+    keuangan Deny sambil mencetak path /tmp ke layar.
+    """
+    modul = sys.modules[__name__]
+    v = getattr(modul, "DB_PATH", None)
+    # Waspadai rekursi: kalau DB_PATH masih _PathDB (belum ditimpa), pakai default.
+    if isinstance(v, _PathDB) or v is None:
+        return DATA_DIR / "finance.db"
+    return v
+
+
+DB_PATH = _PathDB(lambda: _nilai_db_path())
+
+
+def _path_aktif(path=None):
+    """Path database yang harus dipakai sekarang.
+
+    SATU-SATUNYA tempat yang menentukan path. Sebelum ini, 30 fungsi menyimpan
+    default `path=DB_PATH` yang terkunci saat import — jadi menimpa `db.DB_PATH`
+    tidak mengubah apa pun, dan uji yang mengarahkan ke /tmp tetap menulis ke
+    database keuangan Deny tanpa ada yang tahu.
+    """
+    if path is None:
+        return Path(str(DB_PATH))
+    p = Path(str(path))
+    if not p.parent.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 # Berkas penanda folder data. Fungsinya bukan mengunci apa pun — hanya menandai
 # "folder ini memang tempat data finance", supaya kode bisa membedakan folder
@@ -112,7 +214,7 @@ def pastikan_lokasi_aman(path=None):
 @contextmanager
 def connect(path=DB_PATH):
     """Koneksi dengan foreign key aktif. Commit kalau sukses, rollback kalau gagal."""
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(_path_aktif(path)))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     try:
@@ -134,9 +236,10 @@ def init_db(path=DB_PATH):
     sementara di /tmp akan ikut terhenti tanpa alasan.
     """
     # Hanya periksa folder data sebenarnya, bukan path sementara yang dipakai uji.
-    p = Path(path)
-    if p == DB_PATH:
+    p = _path_aktif(path)
+    if str(p) == str(DB_PATH):
         pastikan_lokasi_aman()
+    path = p
 
     # Tandai folder data supaya pemakaian berikutnya dikenali sebagai sah.
     p.parent.mkdir(parents=True, exist_ok=True)
