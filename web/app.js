@@ -331,6 +331,11 @@ const IKON_SVG = {
   /* chevron ke bawah: menandai lipatan yang bisa dibuka. Diputar lewat CSS
      saat terbuka, jadi cukup satu ikon untuk dua keadaan. */
   lipat: ['m6 9 6 6 6-6'],
+  /* segitiga peringatan (triangle-alert): penanda jatuh tempo dekat/terlambat.
+     Dipakai BERSAMA teks, bukan menggantikan — supaya warning tidak
+     mengandalkan warna saja (buta warna). */
+  peringatan: ['m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z',
+               'M12 9v4', 'M12 17h.01'],
 };
 function ikon(nama) {
   const NS = 'http://www.w3.org/2000/svg';
@@ -3052,6 +3057,79 @@ let urutLipatHutang = 0;
    transitionend, yang bisa tak terpicu kalau elemen berubah cepat. */
 const DURASI_LIPAT = 240;
 
+/* ── Peringatan jatuh tempo per kartu (permintaan Deny) ─────────────────────
+   "setiap list hutang yang tanggalnya sudah mendekati H-2, munculkan tulisan
+   warning bahwa itu tanggal terdekat jatuh tempo" + keputusan Deny: sisa ≤2
+   hari (termasuk hari ini) DAN yang sudah lewat ikut ditandai.
+
+   Mengapa TIDAK memakai `u.cicilan_berikutnya`: server hanya mengambil
+   `jatuh_tempo >= hari_ini` (src/server.py:819-821), jadi cicilan yang SUDAH
+   LEWAT tidak pernah muncul di sana — padahal Deny minta yang lewat ditandai.
+   Kalau semua cicilan sudah lewat, `cicilan_berikutnya` bahkan null. Karena itu
+   kita hitung sendiri dari `u.baris[]`.
+
+   Fungsi MURNI (tanpa DOM, tanpa jam sistem kalau `today` diisi) supaya kasus
+   batas bisa diuji tanpa menunggu tanggal nyata: `today` = 'YYYY-MM-DD'.
+   Aturan:
+     - ambil cicilan BELUM LUNAS (`r.lunas === false`) dengan `jatuh_tempo`
+       PALING AWAL (bandingkan tanggal saja, format ISO -> perbandingan string);
+     - tidak ada baris belum-lunas (semua lunas) -> null (NOL warning);
+     - tanggal < hari ini -> {jenis:'terlambat', hari:N} (gaya tegas);
+     - selisih 0/1/2 hari  -> {jenis:'dekat', hari:N} (warning biasa);
+     - selisih > 2 hari    -> null (tidak muncul).
+   Perhitungan selisih memakai `parseISO` (waktu LOKAL) — BUKAN
+   `new Date('2026-10-13')` polos yang diinterpretasi UTC (bisa geser 1 hari di
+   WIB). Dibulatkan karena selisih dua tengah-malam lokal bisa 23/25 jam saat
+   pergantian DST. */
+function hutangWarning(u, today) {
+  const hariIni = today || todayISO();
+  const baris = (u && u.baris) ? u.baris : [];
+  let palingAwal = null;
+  for (let i = 0; i < baris.length; i++) {
+    const r = baris[i];
+    if (r.lunas) continue;                       /* cicilan lunas tidak dihitung */
+    const k = String(r.jatuh_tempo).slice(0, 10); /* tanggal saja, buang jam */
+    if (palingAwal === null || k < palingAwal) palingAwal = k;
+  }
+  if (palingAwal === null) return null;          /* semua lunas -> nol warning */
+
+  const tHari = parseISO(hariIni).getTime();
+  const tJatuh = parseISO(palingAwal).getTime();
+  const selisih = Math.round((tJatuh - tHari) / 86400000);
+
+  if (selisih < 0) {
+    return { jenis: 'terlambat', hari: -selisih, tanggal: palingAwal,
+             teks: 'Terlambat ' + (-selisih) + ' hari' };
+  }
+  if (selisih === 0) {
+    return { jenis: 'dekat', hari: 0, tanggal: palingAwal,
+             teks: 'Jatuh tempo hari ini' };
+  }
+  if (selisih === 1) {
+    return { jenis: 'dekat', hari: 1, tanggal: palingAwal,
+             teks: 'Jatuh tempo besok' };
+  }
+  if (selisih === 2) {
+    return { jenis: 'dekat', hari: 2, tanggal: palingAwal,
+             teks: 'Jatuh tempo 2 hari lagi' };
+  }
+  return null;                                   /* >2 hari -> tidak ada warning */
+}
+
+/* Tampilan warning: pil berisi IKON segitiga + TEKS (bukan warna saja —
+   aman untuk buta warna). Kelas .hutang-peringatan* ada di web/src.css. */
+function hutangWarningEl(w) {
+  const pil = el('p', 'hutang-peringatan mt-3 mb-0 '
+    + (w.jenis === 'terlambat' ? 'hutang-peringatan-terlambat'
+                               : 'hutang-peringatan-dekat'));
+  const ik = el('span', 'hutang-peringatan-ikon');
+  ik.setAttribute('aria-hidden', 'true');
+  ik.appendChild(ikon('peringatan'));
+  pil.appendChild(ik);
+  pil.appendChild(el('span', null, w.teks + ' · ' + dateLabel(w.tanggal)));
+  return pil;
+}
+
 function hutangKartu(u) {
   /* py-6 menambah padding vertikal (20->24px) HANYA di kartu hutang;
      `.kartu` sendiri tidak diubah supaya tab lain tidak ikut. */
@@ -3085,6 +3163,12 @@ function hutangKartu(u) {
       'Semua cicilan sudah lewat tanggal.'));
   }
   kartu.appendChild(next);
+
+  /* Peringatan jatuh tempo ≤2 hari / terlambat — DI LUAR lipatan, jadi
+     terlihat tanpa membuka rincian (permintaan Deny). Nol warning kalau tidak
+     ada cicilan belum-lunas dalam rentang itu. */
+  const warn = hutangWarning(u);
+  if (warn) kartu.appendChild(hutangWarningEl(warn));
 
   /* Detail semua cicilan, dilipat default tertutup. Tetap memakai kelas
      bersama .txgroup-head + .chevron-lipat (konsisten dengan lipatan di layar

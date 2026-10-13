@@ -480,6 +480,42 @@
     .lipat-hutang { @apply transition-none; }
     .lipat-hutang-isi { transition: none; }
   }
+
+  /* ── Peringatan jatuh tempo per kartu (KHUSUS tab Hutang) ───────────────
+     Permintaan Deny: kartu utang yang cicilan terdekat belum lunasnya ≤2 hari
+     (termasuk hari ini) atau sudah lewat, diberi tulisan warning. Muncul di
+     KARTU (di luar lipatan) supaya terlihat tanpa membuka rincian.
+
+     Penanda BUKAN warna saja: pil memuat IKON segitiga (aria-hidden, karena
+     teksnya sudah membacakan) + TEKS ("Jatuh tempo besok", "Terlambat 3 hari",
+     …). Jadi tetap terbaca bagi pengguna buta warna / mode kontras tinggi.
+
+     Kontras teks diukur WCAG AA (>=4,5:1) dari nilai OKLCH persis Tailwind
+     v4.3.3 (bukan perkiraan hex); konversi OKLCH->sRGB lalu rasio luminans:
+       - dekat  · terang: amber-900 #7b3306 di amber-50  #fffbeb = 8,73:1
+       - dekat  · gelap : amber-200 #fee685 di amber-950 #461901 = 12,05:1
+       - telat  · terang & gelap: putih #ffffff di red-800 #9f0712 = 8,36:1
+     Semua >=4,5:1. (Pelajaran lama: gray-400 di mode terang hanya 2,49:1 ->
+     GAGAL; karena itu di sini TIDAK dipakai abu muda sama sekali.)
+
+     Kelas bersama .txgroup-head/.chevron-lipat TIDAK disentuh — semua kelas di
+     sini berawalan .hutang-peringatan* (modifier khusus Hutang). */
+  .hutang-peringatan {
+    @apply inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5
+           text-[12px] font-semibold leading-snug;
+  }
+  .hutang-peringatan-ikon { @apply inline-flex shrink-0; }
+  .hutang-peringatan-ikon svg { @apply h-4 w-4; }
+  /* dekat (sisa 0-2 hari): kuning-amber lembut, teks amber pekat. */
+  .hutang-peringatan-dekat {
+    @apply border-amber-300 bg-amber-50 text-amber-900
+           dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200;
+  }
+  /* terlambat: merah padat, teks putih — gaya lebih tegas dari 'dekat'. */
+  .hutang-peringatan-terlambat {
+    @apply border-red-800 bg-red-800 text-white dark:border-red-800
+           dark:bg-red-800 dark:text-white;
+  }
 }
 
 @layer utilities {
