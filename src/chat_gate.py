@@ -142,7 +142,13 @@ def _normalisasi_perintah(teks):
     'ya, simpan' -> 'ya simpan'. Karakter di luar pemisah netral TIDAK dibuang
     di sini — pembuangan buta adalah cacat ronde 4 (penanda penolakan hilang).
     Pemeriksaannya ada di `perintah_diizinkan()`.
+
+    Penjaga tipe (perbaikan ronde 6): fungsi ini juga dipanggil dari luar jalur
+    `perintah_diizinkan()`, jadi non-teks dikembalikan sebagai string kosong —
+    yang artinya "tidak ada perintah yang diakui", bukan exception.
     """
+    if not isinstance(teks, str):
+        return ""
     t = teks.lower()
     for p in PEMISAH_NETRAL:
         t = t.replace(p, " ")
@@ -197,8 +203,14 @@ def _cocokkan_akun(hint, akun):
     Mengembalikan (id, nama) kalau pas, atau (None, None). Kalau petunjuknya
     tidak ada dan cuma satu akun aktif, akun itu yang dipakai — sama seperti
     `db._resolve_account`. Kalau lebih dari satu, tidak ditebak.
+
+    Penjaga tipe (perbaikan review ronde 5, 9 Okt 2026): `hint` datang dari
+    keluaran model, jadi bisa berupa angka, list, atau bool. Sebelum ini
+    `hint.strip()` melempar AttributeError lewat `draft()` dan CLI untuk
+    keluaran seperti itu. Hint non-string diperlakukan **seperti hint kosong**
+    — tidak ditebak, tapi juga tidak meledak.
     """
-    if hint and hint.strip():
+    if isinstance(hint, str) and hint.strip():
         h = hint.strip().lower()
         for a in akun:
             if a["name"].lower() == h:
@@ -221,7 +233,19 @@ def draft(text, path=None, parse_fn=None):
     chat dan di panel bisa berbeda diam-diam.
     """
     parse_fn = parse_fn or parser_wrap.parse_kontrak
-    hasil = parse_fn(text)
+    # Penjaga jalur parser (perbaikan review ronde 6): `draft()` adalah pintu
+    # masuk jalur chat. Kalau parser yang disuntikkan melempar (bukan
+    # mengembalikan kode), pemanggil chat menerima stack trace — padahal
+    # prinsip modul ini adalah mengembalikan KODE. `parser_wrap.parse_kontrak`
+    # sendiri sudah menangkap exception; ini menjaga jalur yang sama kalau
+    # parser diganti.
+    try:
+        hasil = parse_fn(text)
+    except Exception as e:
+        return {"ok": False, "error": "parser_melempar",
+                "message": "Parser gagal saat mengurai kalimat itu (%s). "
+                           "Coba tulis lebih sederhana, atau isi manual."
+                           % type(e).__name__}
     # Penjaga bentuk (kelas cacat sama dengan penjaga tipe di `simpan()`):
     # parser yang mengembalikan bentuk salah dulu melempar AttributeError/
     # TypeError ke pemanggil. Modul ini selalu memakai KODE, bukan exception —
@@ -277,22 +301,43 @@ def draft(text, path=None, parse_fn=None):
 
 
 def render_draft(hasil):
-    """Draft -> teks untuk ditampilkan di chat. Tidak menyimpan apa pun."""
+    """Draft -> teks untuk ditampilkan di chat. Tidak menyimpan apa pun.
+
+    Penjaga bentuk (perbaikan review ronde 6, 9 Okt 2026): kelas yang sama
+    dengan penjaga `draft()`/`simpan()` — pemanggil yang menyerahkan hasil
+    berbentuk salah (`None`, teks, dict tanpa `draft` yang benar) dulu menerima
+    `AttributeError` alih-alih teks. Fungsi ini yang menampilkan pesan ke chat,
+    jadi ia tidak boleh jadi tempat exception muncul.
+    """
+    if not isinstance(hasil, dict):
+        return "Gagal mengurai: hasil parser tidak dikenal."
     if not hasil.get("ok"):
         return "Gagal mengurai: %s" % hasil.get("message", "sebab tidak diketahui")
 
     d = hasil.get("draft") or {}
+    if not isinstance(d, dict):
+        return "Gagal mengurai: isi draft bukan bentuk yang dikenal."
     txs = d.get("transactions") or []
+    if not isinstance(txs, list):
+        return "Gagal mengurai: daftar transaksi bukan daftar."
     if not txs:
         return d.get("question") or "Aku tidak menemukan transaksi di pesan itu."
 
     baris = []
     for i, tx in enumerate(txs, 1):
+        if not isinstance(tx, dict):
+            return "Gagal mengurai: ada transaksi yang bukan bentuk yang dikenal."
         akun = tx.get("account_name") or "(akun belum jelas)"
         tujuan = ""
         if tx.get("flow_type") == "transfer":
             tujuan = " -> %s" % (tx.get("to_account_name") or "(akun tujuan belum jelas)")
         tgl = tx.get("occurred_on", "-")
+        # Penjaga tipe (perbaikan review ronde 5): `occurred_on` dari model bisa
+        # bukan teks (mis. angka). Sebelum ini `tgl += "..."` melempar TypeError
+        # saat `assumed_date` truthy. Modul ini selalu memakai KODE/nilai yang
+        # bisa ditampilkan, bukan exception.
+        if not isinstance(tgl, str):
+            tgl = str(tgl) if tgl is not None else "-"
         if tx.get("assumed_date"):
             tgl += " (dianggap hari ini)"
         baris.append("  %d. %s  %s  %s%s  %s" % (
@@ -441,6 +486,31 @@ def periksa_konfirmasi(konfirmasi):
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. SIMPAN — satu-satunya jalur tulis, dan ia menuntut konfirmasi
 # ─────────────────────────────────────────────────────────────────────────────
+def _teks_aman(nilai):
+    """Nilai apa pun -> nilai yang PASTI bisa ditulis ke JSON, atau None.
+
+    Perbaikan review ronde 6 (9 Okt 2026): `waktu` di konfirmasi tidak pernah
+    dijaga tipenya, padahal ia masuk ke jejak asal lewat `json.dumps`. Pemanggil
+    chat yang wajar mengirim `datetime` (bukan teks) — dan `json.dumps` melempar
+    `TypeError: Object of type datetime is not JSON serializable` **sesudah**
+    `db.save_transactions` berhasil. Akibatnya: baris ledger sudah TERTULIS,
+    tapi jejak asalnya hilang dan pemanggil menerima stack trace. Kartu ini
+    menuntut sebaliknya — setiap penyimpanan harus bisa dilacak.
+
+    Semua nilai dinormalkan SEBELUM penyimpanan, jadi tidak ada lagi langkah
+    yang bisa gagal setelah ledger tersentuh. Jejak selalu berisi TEKS supaya
+    bentuknya seragam untuk siapa pun yang membacanya.
+    """
+    if nilai is None or isinstance(nilai, str):
+        return nilai
+    if isinstance(nilai, datetime):
+        return nilai.isoformat(timespec="seconds")
+    try:
+        return json.dumps(nilai, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return repr(nilai)
+
+
 def _catat_asal(asal, ids, path_log=None):
     """Tulis jejak asal penyimpanan ke berkas JSON-per-baris di folder data.
 
@@ -467,9 +537,13 @@ def _catat_asal(asal, ids, path_log=None):
         "jumlah": len(ids),
         "saved_ids": list(ids),
     }
+    # Serialisasi diperiksa SEBELUM berkas dibuka: kalau nilainya tidak bisa
+    # ditulis, jangan tinggalkan berkas kosong yang terlihat seperti jejak.
+    baris = json.dumps(entri, ensure_ascii=False)
     with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entri, ensure_ascii=False) + "\n")
+        f.write(baris + "\n")
     return str(p)
+
 
 
 def simpan(draft_hasil, konfirmasi, path=None, path_log=None):
@@ -531,6 +605,21 @@ def simpan(draft_hasil, konfirmasi, path=None, path_log=None):
             "note": tx.get("note"),
         })
 
+    # Jejak asal dibangun & dinormalkan SEBELUM ledger tersentuh (perbaikan
+    # review ronde 6). Sebelum ini `waktu` mentah dari konfirmasi langsung
+    # masuk `json.dumps` SETELAH `db.save_transactions` berhasil: pemanggil
+    # chat yang mengirim `datetime` (wajar) membuat baris ledger tertulis
+    # sementara jejak asalnya hilang dan exception naik ke pemanggil. Kartu
+    # ini menuntut setiap penyimpanan bisa dilacak, jadi tidak boleh ada
+    # langkah yang masih bisa gagal sesudah baris masuk.
+    asal = {
+        "pengirim": _teks_aman(konfirmasi.get("pengirim")),
+        "kanal": _teks_aman(konfirmasi.get("kanal")),
+        "waktu": _teks_aman(konfirmasi.get("waktu"))
+                 or datetime.now().isoformat(timespec="seconds"),
+        "teks": _teks_aman(konfirmasi.get("teks")),
+    }
+
     try:
         ids = db.save_transactions(items, path=path)
     except Exception as e:
@@ -539,15 +628,18 @@ def simpan(draft_hasil, konfirmasi, path=None, path_log=None):
         return {"ok": False, "error": "gagal_simpan", "message": str(e),
                 "tersimpan": 0}
 
-    asal = {
-        "pengirim": konfirmasi.get("pengirim"),
-        "kanal": konfirmasi.get("kanal"),
-        "waktu": konfirmasi.get("waktu") or datetime.now().isoformat(timespec="seconds"),
-        "teks": konfirmasi.get("teks"),
-    }
-    berkas = _catat_asal(asal, ids, path_log=path_log)
+    try:
+        berkas = _catat_asal(asal, ids, path_log=path_log)
+    except OSError as e:
+        # Baris ledger SUDAH masuk; gagal menulis berkas jejak bukan alasan
+        # untuk melempar exception ke pemanggil — tapi juga tidak boleh
+        # dilaporkan sebagai "beres". Kembalikan apa adanya supaya pemanggil
+        # bisa menampilkan bahwa asalnya tidak terekam.
+        return {"ok": True, "saved_ids": ids, "count": len(ids), "asal": asal,
+                "jejak": None, "jejak_error": "gagal_catat_jejak: %s" % e}
     return {"ok": True, "saved_ids": ids, "count": len(ids),
             "asal": asal, "jejak": berkas}
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

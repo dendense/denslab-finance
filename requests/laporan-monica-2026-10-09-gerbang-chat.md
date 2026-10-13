@@ -4,9 +4,134 @@
 **Tanggal:** 9 Okt 2026
 **Kartu:** `t_0c4c4678`
 **Status:** selesai — semua bukti di bawah dijalankan sungguhan, bukan didesain
-**Revisi:** ronde 5 (9 Okt 2026) — menutup temuan review ronde 4 (field
-konfirmasi non-string melempar exception, bukan kode). Ikut menutup kelas yang
-sama di jalur draft (`draft()`/`simpan()` dengan bentuk salah).
+**Revisi:** ronde 6 (9 Okt 2026) — menutup dua temuan review ronde 5: (1) nilai
+non-string dari parser (`account_hint`/`to_account_hint`/`occurred_on`) masih
+melempar exception, (2) uji mengunci jumlah baris `finance.db` Deny ke angka
+tetap 42 sehingga suite gagal begitu Deny mencatat. Ditambah, dari **self-review
+ronde 6**, dua pintu terakhir dari kelas yang sama: `render_draft()` melempar
+untuk hasil berbentuk salah, dan `waktu` konfirmasi non-teks membuat baris
+ledger **TERTULIS tanpa jejak asal** (lihat bagian (b8) di bawah).
+
+---
+
+## Perubahan ronde 6 — temuan review ronde 5
+
+### Cacat 1 — nilai non-string dari parser melempar exception
+
+Review ronde 5 menemukan kelas "modul memakai KODE, bukan exception" belum
+tuntas: penjaga tipe sudah dipasang untuk `flow_type` dan field konfirmasi,
+tapi **belum** untuk `account_hint`/`to_account_hint` (`_cocokkan_akun()`) dan
+`occurred_on` (`render_draft()`). Keluaran model yang wajar — `account_hint`
+berupa angka — melempar `AttributeError` ke pemanggil dan mematikan CLI.
+
+**Reproduksi lewat parser NYATA** (`parser_wrap.parse_kontrak`, hanya
+`chat_entry.parse` di-stub untuk mensimulasikan balasan model yang cacat),
+dijalankan ke salinan:
+
+```
+1. model balas account_hint = 123
+   draft() -> ok=True, akun=None          (dulu: LEMPAR AttributeError)
+2. transfer, to_account_hint = 7
+   draft() -> ok=True, tujuan=None        (dulu: LEMPAR AttributeError)
+3. occurred_on = 20261009 + assumed_date truthy
+   render_draft -> "20261009 (dianggap hari ini)"  (dulu: LEMPAR TypeError)
+4. CLI chat_gate.main() dengan account_hint = 123
+   main() kembali kode 0                  (dulu: AttributeError dari baris 254)
+```
+
+**Perbaikan** (`src/chat_gate.py`):
+
+- `_cocokkan_akun()`: `if isinstance(hint, str) and hint.strip():` — hint
+  non-string diperlakukan **seperti hint kosong** (tidak ditebak, tapi juga
+  tidak meledak).
+- `render_draft()`: `occurred_on` non-string diubah jadi teks sebelum dirangkai.
+
+Ini bukan pelonggaran gerbang: nilai non-string **tidak membuat apa pun
+tersimpan** — nol baris bertambah di keempat probe. Fail-closed tetap: akun
+yang tidak bisa dipastikan tetap `None` → draft menandai "(akun belum jelas)".
+
+### Cacat 2 — uji mengunci jumlah baris Deny ke angka tetap 42
+
+`tests/test_chat_gate.py:515` menguji `baris_deny_sebelum == 42`. Kartu meminta
+properti **`sesudah == sebelum`**, bukan "sama dengan 42". Assertion absolut itu
+mengunci angka yang berubah setiap kali Deny mencatat — dan itu sudah terjadi:
+saat review ronde 5 menemukannya `finance.db` Deny **46** baris (kini **62**).
+Akibatnya suite GAGAL di checkout bersih, dan klaim "15/15 berkas uji lulus"
+tidak lagi benar.
+
+**Perbaikan** (`tests/test_chat_gate.py`): assertion absolut `== 42` dihapus;
+yang diuji adalah `sesudah == sebelum`. Ditambah satu cek bahwa tidak ada
+`chat_simpan.log` tertinggal di folder data Deny.
+
+### Uji regresi baru — bagian (b7)
+
+4 bentuk nilai non-string dari parser (`account_hint` = `123`/`True`/`["BRI"]`,
+`to_account_hint` = `7`) harus menghasilkan **draft**, dan 2 bentuk
+`occurred_on` non-string harus menghasilkan **teks** — semuanya tanpa exception.
+
+### Self-review ronde 6 — dua pintu terakhir, bagian (b8)
+
+Saya tidak berhenti di dua temuan review. Kelas yang sama ("modul memakai
+**KODE**, bukan exception") saya sisir lagi ke dua pintu yang justru paling
+dekat dengan chat, dan keduanya **dijalankan**, bukan dibaca mata:
+
+**1. `render_draft()` melempar untuk hasil berbentuk salah.** `draft()` sudah
+dijaga bentuknya, tapi fungsi yang menampilkan draft ke chat belum:
+
+```
+render_draft(None)                                  -> LEMPAR AttributeError
+render_draft("x")                                   -> LEMPAR AttributeError
+render_draft({"ok": True, "draft": "x"})             -> LEMPAR AttributeError
+render_draft({"ok": True, "draft": {"transactions": "x"}}) -> LEMPAR AttributeError
+```
+
+Sekarang semuanya mengembalikan **teks** ("Gagal mengurai: ..."). Ditambah
+penjaga jalur parser: `draft()` dengan `parse_fn` yang **melempar** kini
+menghasilkan kode `parser_melempar`, bukan exception ke pemanggil chat.
+
+**2. `waktu` konfirmasi non-teks → baris TERTULIS tanpa jejak asal.** Ini yang
+paling serius, karena melanggar Definisi selesai #4 ("catat asal setiap
+penyimpanan"). `waktu` tidak pernah dijaga tipenya, padahal ia masuk jejak asal
+lewat `json.dumps`. Pemanggil chat yang wajar mengirim `datetime`, bukan teks —
+dan `json.dumps` melempar **sesudah** `db.save_transactions` berhasil:
+
+```
+waktu = datetime(2026,10,12,15,30)  -> LEMPAR TypeError  baris 62->63 TERTULIS  jejak HILANG
+waktu = object()                    -> LEMPAR TypeError  baris 63->64 TERTULIS  jejak HILANG
+```
+
+Perbaikannya: jejak asal **dibangun dan dinormalkan SEBELUM** ledger tersentuh
+(`_teks_aman()`: `datetime` → ISO, nilai lain → JSON/repr), jadi tidak ada lagi
+langkah yang bisa gagal setelah baris masuk. Gagal menulis berkas jejak
+(`OSError`) juga tidak lagi melempar — `simpan()` mengembalikan `ok: True`
+dengan `jejak: null` + `jejak_error`, karena baris ledger sudah masuk dan itu
+tidak boleh dilaporkan sebagai "beres".
+
+```
+waktu = datetime -> ok=True  baris +1  jejak tertulis  (sebelumnya: exception + jejak hilang)
+waktu = int/list/dict/hilang -> ok=True  baris +1  jejak tertulis
+jejak: waktu_konfirmasi selalu berbentuk teks
+```
+
+**Uji:** `tests/test_chat_gate.py` 165 → **197 pemeriksaan, 0 gagal**. Seluruh
+**15/15** berkas uji lulus (dijalankan satu per satu lewat subprocess).
+`CONTRACT.md` §18 ditambah sub-bagian "Nilai non-string dari parser ditangani,
+bukan melempar" dan "Jejak asal tidak boleh hilang sesudah baris tersimpan".
+
+**Sapuan adversarial ronde 6** (sebelum menyerahkan, bukan sesudah dikomplain):
+432 kalimat penolakan turunan (`jangan/ndak/kagak/gak/no/udah/mbok/cancel/stop/
+nanti/tunggu` × `simpan/catat/ya simpan/oke simpan`, dengan koma dan tanda
+seru) → **0 bocor, 0 baris bertambah**. 22 kontrol perintah sah → **0 salah
+ditolak**. 11 jalur yang dipanggil dengan argumen berbentuk salah →
+**0 exception**. AST → fungsi penulis ledger tetap hanya `['simpan']`.
+
+Sapuan itu menemukan satu pintu terakhir yang belum kututup di ronde ini:
+`_normalisasi_perintah(123)` melempar `AttributeError` (`.lower()` dipanggil
+sebelum penjaga tipe). Sudah ditutup — non-teks → `""`, dan ada regresinya.
+
+**Data Deny:** `finance-pribadi/finance.db` = **62 baris** sebelum & sesudah
+(dihitung langsung dengan sqlite3). Tidak ada `chat_simpan.log` di folder data
+Deny.
 
 ---
 
@@ -167,17 +292,18 @@ daftar putih — ditambah, sejak ronde 4, penolakan karakter asing di hulunya.
 | Berkas | Isi |
 |---|---|
 | `src/chat_gate.py` | Gerbang: `draft()` (baca-saja) + `simpan()` (menulis, tapi menuntut konfirmasi Deny), dengan daftar putih perintah + penolakan karakter asing. |
-| `tests/test_chat_gate.py` | 143 pemeriksaan: (a) draft tidak menulis, (b) simpan tanpa Deny ditolak, (b2) penjaga negasi, (b3) daftar putih, (b4) karakter asing, (c) simpan setelah Deny berhasil, (d) asal tercatat, (+) Rin tidak punya jalur simpan. |
+| `tests/test_chat_gate.py` | **197 pemeriksaan**: (a) draft tidak menulis, (b) simpan tanpa Deny ditolak, (b2) penjaga negasi, (b3) daftar putih, (b4) karakter asing, (b5) field konfirmasi non-string, (b6) bentuk salah dari parser/draft, (b7) nilai non-string dari parser, (b8) jalur tampil & jejak, (c) simpan setelah Deny berhasil, (d) asal tercatat, (+) Rin tidak punya jalur simpan. |
 | `scripts/contoh_draft_chat.py` | Contoh keluaran draft NYATA lewat parser hidup. |
 | `scripts/uji_hidup_chat.py` | Alur hidup: draft → tolak (termasuk bentuk bocor ronde 3 & 4) → tolak Rin → simpan Deny, di salinan. |
-| `docs/CONTRACT.md` §18 | Aturan lengkap, termasuk daftar putih, aturan karakter asing, dan batas yang jujur. |
+| `docs/CONTRACT.md` §18 | Aturan lengkap, termasuk daftar putih, aturan karakter asing, penjagaan nilai non-string, dan batas yang jujur. |
 | `.gitignore` | `chat_simpan.log` (data, bukan kode). |
 
 `draft()` memakai **parser yang sama** dengan halaman Catat
 (`parser_wrap.parse_kontrak`) — tidak ada jalur parse kedua. Diuji dengan spy.
 
 Commit: ronde 1 `bbe807c`, ronde 2 `9f6a56d` + `d26447d`, ronde 3 `ca0ec4c`,
-ronde 4 di bawah ini.
+ronde 4 `affa942`, ronde 5 `2864f87` + `ad5395a`, ronde 6 belum di-commit
+(lihat "Status commit" di bawah).
 
 ---
 
@@ -186,7 +312,7 @@ ronde 4 di bawah ini.
 ### Uji otomatis
 
 ```
-python3 tests/test_chat_gate.py     ->  HASIL: semua uji lulus  (143 pemeriksaan)
+python3 tests/test_chat_gate.py     ->  HASIL: semua uji lulus  (197 pemeriksaan, 0 gagal)
 seluruh 15 berkas uji di tests/     ->  15 lulus, 0 gagal
 ```
 
@@ -199,18 +325,25 @@ Termasuk, lewat AST (bukan dibaca mata):
 
 | | Jumlah baris |
 |---|---|
-| `finance-pribadi/finance.db` SEBELUM | 42 |
-| `finance-pribadi/finance.db` SESUDAH | **42** |
+| `finance-pribadi/finance.db` SEBELUM | 62 |
+| `finance-pribadi/finance.db` SESUDAH | **62** |
+
+Angka ini adalah **keadaan Deny saat uji dijalankan**, bukan angka yang diuji —
+assertion absolut `== 42` sudah dihapus (temuan review ronde 5, cacat 2). Yang
+diuji adalah properti `sesudah == sebelum`.
 
 Semua penulisan uji terjadi di salinan `/tmp`. Tidak ada `chat_simpan.log`
 yang tertinggal di folder data Deny (diperiksa langsung).
 
 ### Alur hidup (`scripts/uji_hidup_chat.py`, parser hidup, model `deepseek-v4-1-flash`)
 
+Dijalankan ulang 12 Okt 2026 setelah perbaikan ronde 6:
+
 ```
 1. DRAFT "beli makan malam 32000 pakai BRI"
-     1. Rp 32.000  Pengeluaran  BRI  2026-10-09 (dianggap hari ini)
-     baris sebelum=42 sesudah=42  TIDAK bertambah
+     1. Rp 32.000  Pengeluaran  BRI  2026-10-12 (dianggap hari ini)
+        catatan: beli makan malam
+     baris sebelum=62 sesudah=62  TIDAK bertambah
 
 2. Deny membalas PENOLAKAN
      "jangan simpan"          -> ditolak
@@ -223,26 +356,28 @@ yang tertinggal di folder data Deny (diperiksa langsung).
      "❌ simpan"              -> ditolak
      "⛔ simpan"              -> ditolak
      "simpan ❌"              -> ditolak
-     baris sebelum=42 sesudah=42  TIDAK bertambah
+     baris sebelum=62 sesudah=62  TIDAK bertambah
      jejak dibuat? tidak
 
 3. Rin mencoba menyimpan sendiri
      -> bukan_deny: Perintah simpan hanya sah kalau datang dari Deny sendiri.
-     baris masih 42
+     baris masih 62
 
 4. Deny memerintahkan simpan
-     -> ok=True id=[113]
-     baris sebelum=42 sesudah=43
-     jejak asal: {"disimpan_pada": "2026-10-09T10:00:45", "pengirim": "deny",
+     -> ok=True id=[133]
+     baris sebelum=62 sesudah=63
+     jejak asal: {"disimpan_pada": "2026-10-12T15:35:50", "pengirim": "deny",
                   "kanal": "telegram", "waktu_konfirmasi": "2026-10-09T21:30:00",
-                  "teks_konfirmasi": "simpan", "jumlah": 1, "saved_ids": [113]}
+                  "teks_konfirmasi": "simpan", "jumlah": 1, "saved_ids": [133]}
 ```
 
 ### Contoh keluaran draft NYATA (parser hidup, `scripts/contoh_draft_chat.py`)
 
+Dijalankan ulang 12 Okt 2026 (parser hidup, `deepseek-v4-1-flash`, salinan):
+
 ```
 KAMU : beli makan malam 32000
-  1. Rp 32.000  Pengeluaran  (akun belum jelas)  2026-10-09 (dianggap hari ini)
+  1. Rp 32.000  Pengeluaran  (akun belum jelas)  2026-10-12 (dianggap hari ini)
      catatan: beli makan malam
   Akun belum jelas. Pilih salah satu: BRI, Mandiri, Tabungan
   Belum ada yang tersimpan. Balas "simpan" untuk menyimpan.
@@ -277,6 +412,33 @@ tidak tahu. Aturan "Rin tidak punya jalur simpan" dipenuhi oleh kenyataan bahwa
 satu langkah yang dipegang manusia — bukan oleh gerbang ini sendiri. Ini
 ditulis apa adanya di `CONTRACT.md` §18 supaya tidak diklaim lebih dari yang
 bisa dibuktikan.
+
+---
+
+## Status commit — sengaja NOL commit di ronde ini
+
+Ronde 6 **tidak di-commit**, atas perintah Steve (orkestrator, komentar kartu
+12 Okt 2026): kartu `t_451ec8fa` (yuki) bekerja di working tree yang **sama**
+(`~/Documents/AI/finance`), dan satu `git commit -a` akan menerbitkan
+pekerjaannya sebagai milikku. Jadi seluruh perubahan ronde 6 ada di working
+tree, belum di HEAD.
+
+Berkas yang saya sentuh di ronde 6 — semuanya di wilayah yang Steve tetapkan
+milikku:
+
+```
+src/chat_gate.py        (perbaikan + regresi)
+tests/test_chat_gate.py (bagian (b7)/(b8))
+docs/CONTRACT.md        (§18)
+requests/laporan-monica-2026-10-09-gerbang-chat.md
+```
+
+`web/**` **tidak disentuh** (itu milik yuki). Perubahan `web/app.js`,
+`web/index.html`, `web/src.css`, `web/tailwind.css` yang terlihat di
+`git status` bukan milikku.
+
+Yang belum di-commit siapa pun, dan bukan milikku: `docs/LIST-HUTANG.md`
+(untracked, bukan berkas yang saya buat atau sentuh).
 
 ---
 

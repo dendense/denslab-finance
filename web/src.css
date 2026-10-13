@@ -344,6 +344,39 @@
   .tren-svg { @apply block w-full; height: auto; }
   .tren-sumbu { stroke: currentColor; opacity: 0.15; }
 
+  /* ── Batang horizontal: pengeluaran per kategori ───────────────────── */
+  /* Tata letak per baris: nama+nilai di atas, batang selebar penuh di
+     bawahnya. BUKAN "label di kiri, batang di kanan" seperti rancangan awal
+     — nama kategori terpanjang di sini ("Perlengkapan Elektronik Rumah
+     Tangga", 36 karakter) tidak muat di kolom kiri selebar ~170px pada layar
+     360px, dan UI-MOBILE.md melarang memotong label sampai tidak terbaca.
+     Dengan batang selebar penuh, perbandingan panjangnya juga lebih akurat. */
+  .kat-daftar { @apply m-0 flex list-none flex-col gap-3 p-0; }
+  .kat-baris { @apply m-0; }
+  .kat-kepala { @apply flex items-baseline justify-between gap-3; }
+  .kat-kiri { @apply flex min-w-0 flex-wrap items-baseline gap-x-1.5; }
+  .kat-nama {
+    @apply text-[13px] font-medium leading-snug
+           text-gray-700 dark:text-gray-200;
+  }
+  .kat-jumlah { @apply text-[11px] text-gray-500 dark:text-gray-400; }
+  .kat-nilai {
+    @apply shrink-0 tabular-nums text-[13px] font-semibold
+           text-gray-900 dark:text-gray-100;
+  }
+  /* Jalur latar (track) batang. Warnanya SENGAJA netral, bukan token sifat
+     transaksi: track bukan data, ia hanya penanda "skala penuh". Batangnya
+     sendiri yang memakai --color-expense. */
+  .kat-lacak {
+    @apply mt-1 block h-2.5 w-full overflow-hidden rounded-sm
+           bg-gray-200 dark:bg-gray-800;
+  }
+  /* SVG-nya hanya geometri batang; SEMUA teks ada di HTML di atasnya. Teks
+     di dalam SVG yang diskalakan dengan preserveAspectRatio="none" akan
+     gepeng — alasan yang sama dengan label bulan di grafik tren. */
+  .kat-svg { display: block; width: 100%; height: 100%; }
+  .kat-isi { fill: var(--color-expense); }
+
   /* ── Peringatan ────────────────────────────────────────────────────── */
   .peringatan {
     @apply flex items-center gap-2 mt-3 px-3 py-1.5 rounded
@@ -401,6 +434,51 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .chevron-lipat { @apply transition-none; }
+  }
+
+  /* ── Modifier lipatan KHUSUS tab Hutang (.lipat-hutang / .lipat-hutang-isi) ─
+     Kelas bersama .txgroup-head/.chevron-lipat di atas DIPAKAI BERSAMA tab
+     Daftar + tab Hutang, jadi TIDAK diubah di sini. Animasi "hidup" buka-tutup
+     hanya dipasang pada instance Hutang lewat modifier ini.
+
+     Kenapa max-height (bukan height:auto): CSS tidak bisa mentransisikan ke
+     `height:auto`. Tinggi target diukur di JS (scrollHeight) lalu ditulis ke
+     style.maxHeight; di sini hanya transisinya + keadaan tertutup.
+
+     Gerak: 240ms, cubic-bezier(0.4, 0, 0.2, 1) — "ease-in-out" standar
+     Material. Transisi meliputi max-height + opacity. Panah sudah diputar oleh
+     aturan .txgroup-head[aria-expanded='true'] .chevron-lipat di atas (150ms),
+     jadi tidak diduplikasi.
+
+     prefers-reduced-motion: reduce → transisi dimatikan; lipatan TETAP
+     berfungsi (JS mengubah `hidden`/max-height apa pun) hanya tanpa gerak.
+     Tanpa JS: <ul> default `hidden` di app.js → tetap benar (tertutup); isi
+     tetap ada di DOM dan terbaca begitu `hidden` dilepas. */
+  .lipat-hutang {
+    @apply rounded-lg transition-colors duration-200;
+  }
+  /* Hover khusus Hutang: latar lembut biru (bukan abu bersama). Kontras teks
+     tetap dari .txgroup-head (gray-500 terang / gray-400 gelap) — diukur
+     >=4,5:1 (lihat angka di komentar kartu). */
+  .lipat-hutang:hover {
+    @apply bg-(--color-receivable-bg) text-(--color-receivable);
+  }
+  .lipat-hutang:focus-visible {
+    @apply outline-2 outline-offset-2 outline-blue-600 dark:outline-blue-400;
+  }
+  .lipat-hutang-isi {
+    @apply overflow-hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .lipat-hutang-isi.lipat-hutang-buka {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lipat-hutang { @apply transition-none; }
+    .lipat-hutang-isi { transition: none; }
   }
 }
 

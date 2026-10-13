@@ -623,6 +623,11 @@ async function loadTrend(curMonth) {
       net_real: x.net_real,
       expense_real: x.expense_real,
       total_in: x.total_in,
+      /* Cacah transaksi ikut diteruskan sejak F-2. Sebelumnya dibuang di sini,
+         padahal /api/trend sudah mengirimnya sejak lama — dan tanpa cacah,
+         grafik tidak bisa membedakan "bulan tipis" dari "bulan bolong".
+         Angkanya dari SERVER, tidak dihitung ulang. */
+      tx_count: x.tx_count,
     };
   });
 }
@@ -697,6 +702,30 @@ function drawChart(series) {
   /* Skala: nilai terbesar di antara pemasukan & pengeluaran semua bulan. */
   const semuaNilai = [];
   known.forEach((p) => { semuaNilai.push(p.total_in, p.expense_real); });
+
+  /* ── Garis rata-rata pengeluaran (F-2) ────────────────────────────────
+     Menjawab "bulan ini di atas atau di bawah kebiasaan?".
+
+     🔴 YANG DIHITUNG DI SINI HANYA POSISI GARIS, bukan angka keuangan yang
+     ditampilkan. Alasannya sama dengan panjang batang: panjang batang juga
+     rasio terhadap nilai terbesar, dan itu sudah diterima. Yang TIDAK saya
+     lakukan: mencetak nominal rata-ratanya. Angka itu tidak dikirim endpoint
+     mana pun, jadi menampilkannya berarti UI mengarang angka keuangan —
+     dilarang aturan 1 HANDOFF-YUKI.md. Garisnya diberi keterangan sebagai
+     teks di legenda, tanpa nominal.
+
+     Hanya digambar kalau ada ≥2 bulan berdata: dengan satu bulan, rata-ratanya
+     SAMA dengan bulan itu, dan garisnya cuma menimpa puncak batangnya sendiri
+     — garis yang tidak memberi tahu apa pun. */
+  const rata = known.length >= 2
+    ? known.reduce((j, p) => j + Number(p.expense_real || 0), 0) / known.length
+    : null;
+  /* momo memperingatkan: kalau garis rata-rata ditambahkan, skala harus
+     dihitung ulang termasuk nilainya, kalau tidak garisnya keluar viewBox.
+     Secara matematis rata-rata ≤ nilai terbesar, jadi ini tidak akan
+     mengubah vmax — tapi ditulis eksplisit supaya tidak bergantung pada
+     kebetulan itu. */
+  if (rata !== null) semuaNilai.push(rata);
   const vmax = Math.max(1, ...semuaNilai);
 
   const NS = 'http://www.w3.org/2000/svg';
@@ -737,6 +766,59 @@ function drawChart(series) {
     stroke: 'currentColor', 'stroke-width': 1, opacity: 0.25,
   }));
 
+  /* ── Pola pembeda batang pengeluaran (F-2) ────────────────────────────
+     Alasan: dua batang dalam satu slot sebelumnya hanya dibedakan oleh
+     WARNA (hijau vs merah). Itu gagal syarat "terbaca tanpa warna" —
+     dan momo menunjuk ini sebagai kekurangan chart tren (§4.5). Posisi
+     sudah membantu (masuk selalu kiri, keluar selalu kanan), tapi posisi
+     tidak menolong kalau hanya satu batang yang terlihat di bulan itu.
+
+     Solusinya pola GARIS MIRING pada batang pengeluaran. Garisnya
+     `currentColor` (warna teks kartu), bukan warna baru — jadi ia bekerja
+     di terang maupun gelap tanpa token tambahan, dan dasar batangnya tetap
+     `--color-expense` sehingga kontras batang-terhadap-kartu tidak berubah.
+
+     Jaraknya dihitung dalam SATUAN LAYAR lalu dikonversi ke satuan viewBox,
+     sama seperti minH: pola tetap 6px di layar pada lebar apa pun. Angka
+     tetap 6 unit akan jadi 2,4px di 360px — terlalu rapat, batangnya
+     terlihat abu-abu, bukan berpola. */
+  const skalaSvg = lebarSvgNyata() / W;
+  const jarakPola = 6 / skalaSvg;
+  const tebalPola = Math.max(0.6, 1 / skalaSvg);
+  const defs = mk('defs', {});
+  const pola = mk('pattern', {
+    id: 'tren-pola-keluar', patternUnits: 'userSpaceOnUse',
+    width: jarakPola, height: jarakPola,
+  });
+  pola.appendChild(mk('rect', {
+    x: 0, y: 0, width: jarakPola, height: jarakPola,
+    fill: 'var(--color-expense)',
+  }));
+  pola.appendChild(mk('line', {
+    x1: 0, y1: jarakPola, x2: jarakPola, y2: 0,
+    stroke: 'currentColor', 'stroke-width': tebalPola, opacity: 0.55,
+  }));
+  defs.appendChild(pola);
+  svg.appendChild(defs);
+
+  /* ── Garis rata-rata pengeluaran (F-2) ────────────────────────────────
+     Digambar SEBELUM batang supaya batang tetap di atasnya. Putus-putus,
+     `currentColor` — sengaja lebih redup daripada batang supaya tidak
+     terbaca sebagai data.
+
+     Opacity 0,55 BUKAN pilihan estetika: 0,45 diukur dan GAGAL — 2,93:1
+     terhadap kartu putih, di bawah ambang WCAG 1.4.11 (non-teks 3:1).
+     Pada 0,55 terukur 3,96:1 (terang) / 5,61:1 (gelap). Kalau diturunkan
+     lagi demi "halus", garisnya berhenti memenuhi syarat. */
+  if (rata !== null) {
+    const yRata = TOP + innerH - naik(rata);
+    svg.appendChild(mk('line', {
+      x1: L, y1: yRata, x2: W - R, y2: yRata,
+      stroke: 'currentColor', 'stroke-width': 1.5,
+      'stroke-dasharray': '6 4', opacity: 0.55,
+    }));
+  }
+
   series.forEach((p, i) => {
     const tengah = L + slot * i + slot / 2;
     if (p.state === 'ada') {
@@ -757,11 +839,11 @@ function drawChart(series) {
         width: batangW, height: Math.max(minH, hMasuk), rx: 2,
         fill: 'var(--color-income)',
       }));
-      /* batang pengeluaran sungguhan (kanan), merah */
+      /* batang pengeluaran sungguhan (kanan), merah + pola garis miring */
       svg.appendChild(mk('rect', {
         x: tengah + jeda / 2, y: TOP + innerH - Math.max(minH, hKeluar),
         width: batangW, height: Math.max(minH, hKeluar), rx: 2,
-        fill: 'var(--color-expense)',
+        fill: 'url(#tren-pola-keluar)',
       }));
     } else {
       /* slot kosong: kotak bergaris putus, tanda "belum dicatat" — bukan nol */
@@ -781,12 +863,42 @@ function drawChart(series) {
   const barisLabel = el('div', 'mt-1 flex');
   series.forEach((p) => {
     const m = Number(p.month.split('-')[1]);
-    const t = el('span', 'flex-1 text-center text-[11px] '
+    /* Satu kolom per bulan. Angka cacah ikut di kolom yang sama supaya
+       sejajar dengan batangnya, bukan mengambang di tempat lain. */
+    const kolom = el('div', 'flex-1 min-w-0 text-center');
+    const namaBulan = el('span', 'block text-[11px] '
       + (p.state === 'ada' ? 'font-semibold text-gray-600 dark:text-gray-300'
-                           : 'text-gray-400 dark:text-gray-600'),
+                           : 'text-gray-500 dark:text-gray-400'),
       MONTH_SHORT[m - 1]);
-    if (p.state !== 'ada') t.title = 'Belum ada data';
-    barisLabel.appendChild(t);
+    /* `title` dipertahankan dari versi sebelumnya: bulan tanpa data tetap
+       bisa dijelaskan saat disinggahi kursor. Sempat hilang saat cacah
+       transaksi ditambahkan, dan itu regresi — dikembalikan di sini. */
+    if (p.state !== 'ada') namaBulan.title = 'Belum ada data';
+    kolom.appendChild(namaBulan);
+
+    /* ── Cacah transaksi (F-2) ─────────────────────────────────────────
+       momo §4.4(d): nomor `tx_count` kecil di bawah label bulan, "supaya
+       Deny tahu kalau datanya bolong". Itu kebutuhan nyata — dua bulan
+       dengan tinggi batang sama bisa berarti 3 transaksi atau 40.
+
+       Kenapa HANYA ANGKANYA, tanpa kata "transaksi": diukur, bukan dikira.
+       Lebar satu kolom pada 360px = 47,7px. "120 transaksi" pada 10px =
+       63,8px (meluber), "120 trx" = 33,3px (muat, tapi "trx" adalah
+       singkatan yang belum pernah dipakai panel ini — konvensi baru).
+       Angka telanjang "120" = 11,3px: selalu muat sampai 4 digit.
+       Satuannya dijelaskan sekali di legenda, dan `aria-label` di bawah
+       tetap menyebut "transaksi" lengkap per bulan — jadi pembaca layar
+       tidak pernah mendengar angka tanpa satuan. */
+    if (p.state === 'ada') {
+      const n = Number(p.tx_count) || 0;
+      const cacah = el('span', 'block text-[10px] text-gray-500 dark:text-gray-400', String(n));
+      /* `font-variant-numeric` lewat inline style, bukan kelas `tabular-nums`:
+         kelas itu tidak ada di tailwind.css hasil build. Angka rata lebar
+         supaya kolom 6 bulan tidak bergoyang saat cacahnya beda digit. */
+      cacah.style.fontVariantNumeric = 'tabular-nums';
+      kolom.appendChild(cacah);
+    }
+    barisLabel.appendChild(kolom);
   });
   host.appendChild(barisLabel);
 
@@ -794,7 +906,8 @@ function drawChart(series) {
   const rows = series.slice().reverse().map((p) => {
     const lbl = MONTH_SHORT[Number(p.month.split('-')[1]) - 1] + ' ' + p.month.slice(0, 4);
     if (p.state === 'ada') {
-      return lbl + ': masuk ' + rupiah(p.total_in) + ', keluar ' + rupiah(p.expense_real);
+      return lbl + ': masuk ' + rupiah(p.total_in) + ', keluar ' + rupiah(p.expense_real)
+        + ', ' + (Number(p.tx_count) || 0) + ' transaksi';
     }
     if (p.state === 'error') return lbl + ': gagal dibaca';
     return lbl + ': belum ada data';
@@ -815,9 +928,198 @@ function drawChart(series) {
     w.appendChild(document.createTextNode(teks));
     return w;
   };
+  /* Penanda garis rata-rata: GARIS MENDATAR putus-putus, bukan kotak.
+     Kalau kupakai kotak bergaris putus lagi, ia akan kembar dengan penanda
+     "bulan belum dicatat" dan legenda jadi tidak bisa dibedakan — persis
+     kesalahan yang F-2 ini sedang perbaiki. Bentuknya sengaja mengikuti
+     bentuk aslinya di grafik (garis mendatar). */
+  const itemGaris = (teks) => {
+    const w = el('span', 'inline-flex items-center gap-1.5');
+    /* `w-4` tidak ada di build Tailwind — lebar penanda ditulis inline. */
+    const k = el('i', 'inline-block shrink-0');
+    k.style.width = '16px';
+    k.style.borderTop = '1.5px dashed currentColor';
+    k.style.opacity = '0.55';
+    w.appendChild(k);
+    w.appendChild(document.createTextNode(teks));
+    return w;
+  };
+
   legend.appendChild(item('var(--color-income)', 'pemasukan'));
   legend.appendChild(item('var(--color-expense)', 'pengeluaran sungguhan'));
   legend.appendChild(item(null, 'bulan belum dicatat', true));
+  /* Keterangan garis rata-rata HANYA kalau garisnya benar-benar digambar.
+     Kalau tidak, legenda akan menjelaskan sesuatu yang tidak ada di grafik. */
+  if (rata !== null) {
+    legend.appendChild(itemGaris('rata-rata pengeluaran ' + known.length + ' bulan'));
+  }
+  /* Satuan untuk angka kecil di bawah label bulan — dijelaskan SEKALI di
+     sini, bukan diulang di setiap kolom (di 360px tidak muat). */
+  legend.appendChild(el('span', 'inline-flex items-center gap-1.5',
+    'angka kecil = jumlah transaksi bulan itu'));
+}
+
+/* ══ Pengeluaran per kategori — batang horizontal ═══════════════════════
+ * Menjawab satu pertanyaan: "bulan ini uangku habis ke mana?".
+ *
+ * Sumbernya /api/spending-by-category (CONTRACT.md §2). SQL-nya sudah
+ * menyaring flow_type='expense', jadi talangan project dan pelunasan utang
+ * TIDAK ikut — itu bukan konsumsi, dan kalau dicampur kategori "Tagihan"
+ * akan terlihat raksasa padahal isinya pelunasan pinjaman.
+ *
+ * TIGA keadaan dibedakan tegas, sama seperti drawChart():
+ *   'ada'   -> ada minimal satu kategori dengan total > 0
+ *   'kosong'-> server menjawab, tapi tidak ada pengeluaran bulan itu
+ *   'gagal' -> endpointnya tidak bisa dihubungi
+ * Kegagalan TIDAK boleh menyamar jadi "belum ada pengeluaran": kalimat itu
+ * klaim tentang data Deny, dan tidak boleh dibuat kalau yang terjadi
+ * sebenarnya koneksi putus (UI-MOBILE.md, bagian "Kegagalan tidak boleh
+ * menyamar jadi keadaan data").
+ *
+ * UI TIDAK menjumlahkan apa pun di sini. Rancangan momo (KAJIAN-BKLIT-UI
+ * §4.4) meminta 7 kategori teratas + satu batang "Lainnya (N kategori)"
+ * hasil penjumlahan ekor. Penjumlahan itu DILAKUKAN DI UI, dan itu
+ * melanggar aturan pertama HANDOFF-YUKI.md: "UI tidak menghitung angka
+ * keuangan. Semua angka dari API." Karena itu di sini SEMUA kategori yang
+ * dikirim server digambar apa adanya, tanpa digabung dan tanpa diurut ulang
+ * (server sudah ORDER BY total DESC). Kalau daftarnya suatu saat terlalu
+ * panjang, penggabungan ekornya harus di server — itu perubahan API, dan
+ * itu keputusan monica, bukan tambalan di UI. Selisih ini dilaporkan di
+ * laporan F-1.
+ *
+ * Satu-satunya aritmetika di sini adalah GEOMETRI: panjang batang =
+ * total / total terbesar. Tidak ada angka keuangan yang dihitung ulang.
+ *
+ * AKSESIBILITAS — dan ini hasil pengukuran, bukan dugaan:
+ * Versi pertama saya menaruh role="img" + aria-label di host, meniru
+ * `#chart-host`. Saya ukur pohon aksesibilitasnya lewat CDP
+ * (`Accessibility.getPartialAXTree` + `DOM.describeNode`) dan hasilnya:
+ * role="img" di Chrome TIDAK memangkas anak-anaknya. Teks per kategori
+ * tetap muncul sebagai node terpisah di dalam subtree, jadi pembaca layar
+ * membacakan sepuluh kategori DUA KALI — sekali dari aria-label, sekali
+ * dari teks di dalamnya. Untuk #chart-host itu tidak terasa karena isinya
+ * murni SVG tanpa teks; di sini isinya teks.
+ * Perbaikannya: teksnya sendiri yang jadi isi aksesibel (nama kategori,
+ * jumlah transaksi, nominal — sudah terbaca berurutan di dalam <li>), dan
+ * batangnya ditandai aria-hidden. Nol pengulangan, nol aria-label tambahan.
+ * Aturan kartu F-1 "nilai yang hanya bisa dibaca lewat hover = gagal" tetap
+ * terpenuhi karena nominalnya memang teks, bukan tooltip.
+ */
+async function renderKategori() {
+  const host = $('kategori-host');
+  if (!host) return;
+  host.textContent = '';
+  const note = $('kategori-note');
+  const bulan = state.month || null;
+
+  let d;
+  try {
+    d = await apiGet('/spending-by-category'
+      + (bulan ? '?month=' + encodeURIComponent(bulan) + '&direction=out' : '?direction=out'));
+  } catch (e) {
+    note.textContent = 'Rincian kategori tidak bisa dibaca dari server. '
+      + 'Ini BUKAN berarti pengeluaranmu kosong.';
+    const kotak = el('div', 'rounded-xl border border-dashed border-gray-300 px-4 py-5 '
+      + 'text-center dark:border-gray-700');
+    kotak.appendChild(el('p', 'm-0 mb-1 text-base font-semibold',
+      'Tidak bisa memuat rincian kategori'));
+    kotak.appendChild(el('p', 'm-0 text-sm text-gray-500 dark:text-gray-400',
+      'Server tidak menjawab /api/spending-by-category. Datamu tidak '
+      + 'terpengaruh — muat ulang halaman, atau periksa apakah servernya '
+      + 'masih jalan.'));
+    host.appendChild(kotak);
+    return;
+  }
+
+  const semua = (d.items || []).filter((r) => Number(r.total) > 0);
+  const namaBulan = monthLabel(d.month || bulan || '');
+
+  /* ── Keadaan kosong: kalimat yang menjelaskan, bukan batang nol ──────── */
+  if (!semua.length) {
+    note.textContent = 'Tidak ada pengeluaran tercatat di ' + namaBulan + '. '
+      + 'Tidak digambar sebagai batang nol — nol dan "tidak ada data" dua hal '
+      + 'berbeda.';
+    const kotak = el('div', 'rounded-xl border border-dashed border-gray-300 px-4 py-5 '
+      + 'text-center dark:border-gray-700');
+    kotak.appendChild(el('p', 'm-0 mb-1 text-base font-semibold',
+      'Belum ada pengeluaran di ' + namaBulan));
+    kotak.appendChild(el('p', 'm-0 text-sm text-gray-500 dark:text-gray-400',
+      'Yang dihitung di sini hanya transaksi bersifat "Pengeluaran". Talangan '
+      + 'dan pelunasan utang sengaja tidak ikut — keduanya bukan konsumsi.'));
+    host.appendChild(kotak);
+    return;
+  }
+
+  /* Geometri: panjang batang relatif terhadap kategori TERBESAR. Nilai
+     terbesar selalu jadi batang penuh — itu yang membuat panjangnya bisa
+     dibandingkan. Angka persisnya tetap dicetak sebagai teks di tiap baris. */
+  const terbesar = Math.max(...semua.map((r) => Number(r.total)));
+  const totalKategori = semua.length;
+
+  /* Catatan TIDAK menjumlahkan apa pun. Versi pertamanya menulis "N kategori,
+     M transaksi" dengan M = jumlah `tx_count` — dan itu UI yang menjumlahkan
+     sendiri, persis yang dilarang HANDOFF-YUKI.md aturan 1. Yang tersisa di
+     sini cuma panjang daftar (bukan penjumlahan nilai) dan nama kategori
+     terbesar, yang diambil apa adanya dari server (server sudah ORDER BY
+     total DESC). */
+  note.textContent = totalKategori + ' kategori, urut dari terbesar. '
+    + 'Panjang batang = porsi terhadap kategori terbesar (' + semua[0].category
+    + '), bukan terhadap total. Angka persisnya tercetak di tiap baris. '
+    + 'Talangan dan pelunasan utang tidak dihitung.';
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const daftar = el('ul', 'kat-daftar');
+
+  semua.forEach((r) => {
+    const nilai = Number(r.total);
+    const persen = terbesar > 0 ? (nilai / terbesar) * 100 : 0;
+    const jumlahTx = Number(r.tx_count) || 0;
+
+    const li = el('li', 'kat-baris');
+
+    /* Nama + jumlah transaksi di kiri, nominal di kanan. Nominal DICETAK,
+       tidak disembunyikan di tooltip: nilai yang hanya bisa dibaca lewat
+       hover = gagal (kartu F-1 + UI-MOBILE.md "Yang harus dihindari"). */
+    const kepala = el('div', 'kat-kepala');
+    const kiri = el('div', 'kat-kiri');
+    kiri.appendChild(el('span', 'kat-nama', r.category));
+    kiri.appendChild(el('span', 'kat-jumlah',
+      jumlahTx + ' transaksi'));
+    kepala.appendChild(kiri);
+    kepala.appendChild(el('span', 'kat-nilai', rupiah(nilai)));
+    li.appendChild(kepala);
+
+    /* Batangnya inline SVG, sama seperti grafik tren — nol library, nol
+       dependensi. viewBox 100x10 dengan preserveAspectRatio="none": SVG
+       meregang mengikuti lebar kartu tanpa perlu dihitung ulang saat jendela
+       diubah ukurannya. SEMUA teks ada di HTML di atas batang, bukan di
+       dalam SVG — teks di dalam SVG yang diregangkan jadi gepeng.
+
+       aria-hidden: batangnya hiasan. Panjangnya sudah dinyatakan ulang
+       sebagai angka di baris yang sama, jadi tidak ada informasi yang hilang
+       saat pembaca layar melewatinya. */
+    const lacak = el('div', 'kat-lacak');
+    lacak.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 10');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'kat-svg');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('x', '0');
+    rect.setAttribute('y', '0');
+    rect.setAttribute('width', String(persen));
+    rect.setAttribute('height', '10');
+    rect.setAttribute('class', 'kat-isi');
+    svg.appendChild(rect);
+    lacak.appendChild(svg);
+    li.appendChild(lacak);
+
+    daftar.appendChild(li);
+  });
+
+  host.appendChild(daftar);
 }
 
 /* ══ Baris transaksi — lencana per flow_type ═════════════════════════════ */
@@ -1915,26 +2217,88 @@ async function renderTargetTabungan() {
      sebelahnya, jadi tidak ada dua bacaan berbeda (jawabanku ke monica). */
   const persen = Number(t.persen) || 0;
   const lebar = Math.max(0, Math.min(100, persen));
-  const bar = el('div', 'mt-3 h-2 w-full overflow-hidden rounded-full '
-    + 'bg-gray-200 dark:bg-gray-800');
+  const bar = el('div', 'mt-3 h-2 w-full rounded-full bg-gray-200 dark:bg-gray-800');
+  /* Position dipasang INLINE, bukan lewat kelas `relative`/`absolute`:
+     keduanya TIDAK ADA di web/tailwind.css hasil build (diperiksa dengan
+     pencarian literal di berkas build, bukan ditebak). Menambahkannya
+     berarti menjalankan `npm run css` — dilarang kartu ini.
+     `overflow-hidden` juga DILEPAS dari sini: penanda skala 50% menonjol
+     keluar bar, dan `overflow-hidden` akan memotongnya. Yang butuh
+     pemotongan adalah isinya saja (sudut membulat), dan itu dipasang di
+     elemen isi. */
+  bar.style.position = 'relative';
   bar.setAttribute('role', 'progressbar');
-  bar.setAttribute('aria-valuenow', String(persen));
   bar.setAttribute('aria-valuemin', '0');
   bar.setAttribute('aria-valuemax', '100');
   bar.setAttribute('aria-label', 'Progres target tabungan');
+
+  /* ── Kenapa `aria-valuenow` memakai `lebar`, bukan `persen` (F-2) ─────
+     Sebelumnya di sini `aria-valuenow` = `persen`, yang bisa > 100 (target
+     terlampaui — dan itu memang tidak di-cap, kelebihan itu informasi).
+     Tapi `aria-valuemax` = 100, jadi saat persen 140 atributnya berbunyi
+     "140 dari maksimum 100" — nilai di luar rentangnya sendiri. Itu ARIA
+     tidak sah, dan pembaca layar boleh mengabaikan seluruh progressbar-nya
+     karena itu; satu bug kecil bisa menghapus seluruh informasi bar.
+
+     Perbaikan: `aria-valuenow` = `lebar` (0–100, selalu di dalam rentang),
+     dan angka sebenarnya pindah ke `aria-valuetext` sebagai kalimat. Jadi
+     tidak ada informasi yang hilang — justru lebih: pembaca layar kini
+     mendengar nominalnya, bukan cuma angka persen telanjang. */
+  bar.setAttribute('aria-valuenow', String(Math.round(lebar)));
+  /* Status dari SERVER (aturan 3b), bukan dihitung dari persen. Dipakai di
+     kalimat `aria-valuetext` di bawah, jadi harus dihitung lebih dulu. */
+  const labelStatus = t.status === 'tercapai' ? 'Tercapai'
+    : t.status === 'belum_mulai' ? 'Belum mulai' : 'Berjalan';
+  /* Kalimat lengkap, urutan: terkumpul, target, persen asli, status.
+     `persen` ASLI (bukan `lebar`) — "140 persen" itu fakta, dan menyensor
+     jadi "100" justru menyembunyikan bahwa targetnya sudah lewat. */
+  bar.setAttribute('aria-valuetext',
+    'Terkumpul ' + rupiah(t.terkumpul) + ' dari ' + rupiah(t.target_amount)
+    + ', ' + persen + ' persen, ' + labelStatus.toLowerCase() + '.');
+
   const isi = el('div', 'h-full rounded-full transition-[width] duration-300');
   isi.style.width = lebar + '%';
   /* Tercapai -> hijau; belum mulai -> abu (jangan terlihat seperti gagal). */
   isi.style.background = t.status === 'tercapai' ? 'var(--color-income)'
     : t.status === 'belum_mulai' ? 'var(--color-transfer)' : 'var(--color-income)';
   bar.appendChild(isi);
+
+  /* ── Penanda skala 50% (F-2) ─────────────────────────────────────────
+     Tanpa acuan di tengah, bar 8px sulit dinilai "sudah separuh atau belum"
+     tanpa mengukur dengan mata.
+
+     🔴 PENANDA INI DIPINDAH KE LUAR BAR, dan itu hasil pengukuran, bukan
+     selera. Percobaan pertama menaruhnya DI DALAM bar (garis 1px
+     `currentColor` opacity 0,5). Diukur: penanda itu harus kontras ≥3:1
+     terhadap ISI bar (hijau `#067647`) dan terhadap TRACK (`#e5e7eb`) —
+     dua latar yang luminansinya berjauhan. Rentangnya kosong, persis
+     masalah yang F-1 sudah buktikan pada track-vs-batang: tidak ada satu
+     warna yang lulus keduanya. Menambah token warna baru dilarang kartu.
+
+     Solusi: penanda digambar sebagai goresan yang MENONJOL keluar dari bar
+     (atas & bawah), jadi latarnya adalah KARTU, bukan isi bar atau track.
+     Dengan begitu ia cuma perlu lulus sekali terhadap satu latar, dan itu
+     bisa diukur: `currentColor` opacity 0,55 → 3,96:1 (terang) / 5,61:1
+     (gelap), sama dengan garis rata-rata di grafik tren.
+
+     `aria-hidden="true"`: ini hiasan skala, bukan data. Angkanya sudah
+     dibawa teks "52% dari target" dan `aria-valuetext`; membiarkannya
+     terbaca hanya menambah node kosong di pohon aksesibilitas. */
+  const penanda = el('div', '');
+  penanda.style.position = 'absolute';
+  penanda.style.left = '50%';
+  penanda.style.top = '-3px';
+  penanda.style.bottom = '-3px';
+  penanda.style.width = '1px';
+  penanda.style.background = 'currentColor';
+  penanda.style.opacity = '0.55';
+  penanda.setAttribute('aria-hidden', 'true');
+  bar.appendChild(penanda);
+
   host.appendChild(bar);
 
   const barisPersen = el('div', 'mt-1 flex items-baseline justify-between gap-3');
   barisPersen.appendChild(el('span', 'text-[13px] font-semibold', persen + '% dari target'));
-  /* Status dari SERVER (aturan 3b), bukan dihitung dari persen. */
-  const labelStatus = t.status === 'tercapai' ? 'Tercapai'
-    : t.status === 'belum_mulai' ? 'Belum mulai' : 'Berjalan';
   barisPersen.appendChild(el('span', 'text-[12px] text-gray-500 dark:text-gray-400', labelStatus));
   host.appendChild(barisPersen);
 
@@ -2004,7 +2368,7 @@ async function renderTargetTabungan() {
   /* ── Aturan 3d: `catatan` wajib tampil ───────────────────────────────── */
   if (d.catatan) {
     host.appendChild(el('p', 'mt-3 mb-0 border-t border-gray-100 pt-2 text-[12px] '
-      + 'leading-snug text-gray-400 dark:border-gray-800 dark:text-gray-500', d.catatan));
+      + 'leading-snug text-gray-500 dark:border-gray-800 dark:text-gray-400', d.catatan));
   }
 }
 
@@ -2395,7 +2759,11 @@ function renderDraft(draft) {
     }
     box.remove();
     chatBubble('Tersimpan: ' + res.count + ' transaksi.', 'bot');
-    toast('Tersimpan · ' + res.count + ' transaksi');
+    const lunasDraft = res.hutang_lunas || [];
+    toast('Tersimpan · ' + res.count + ' transaksi'
+      + (lunasDraft.length
+        ? ' · Cicilan ' + lunasDraft[0].nama_utang + ' ditandai lunas' : ''));
+    hutangLunasBaru(lunasDraft);
     state.parsedAny = true;
     await refresh();
   });
@@ -2548,7 +2916,11 @@ function openManual() {
     }
     box.remove();
     chatBubble('Tersimpan: ' + res.count + ' transaksi.', 'bot');
-    toast('Tersimpan');
+    const lunasManual = res.hutang_lunas || [];
+    toast('Tersimpan'
+      + (lunasManual.length
+        ? ' · Cicilan ' + lunasManual[0].nama_utang + ' ditandai lunas' : ''));
+    hutangLunasBaru(lunasManual);
     state.parsedAny = true;
     await refresh();
   });
@@ -2619,13 +2991,313 @@ async function sendChat(text) {
   if (d.question) chatBubble(d.question);
 }
 
+/* ══ Hutang — jadwal cicilan per utang (GET /api/debts) ══════════════════
+   Sumber: LIST-HUTANG.md, dibaca server secara READ-ONLY. Halaman ini TIDAK
+   menyentuh DB dan TIDAK menghitung angka keuangan apa pun — total per utang,
+   jumlah cicilan, total semua, dan "cicilan berikutnya" semuanya sudah
+   dihitung server (CONTRACT.md: UI tidak pernah menghitung angka keuangan).
+
+   Kenapa ada: berkas LIST-HUTANG.md tidak punya penanda "sudah dibayar",
+   jadi halaman ini menampilkan JADWAL (nominal + jatuh tempo), bukan progres
+   cicilan. "Cicilan berikutnya" = yang pertama belum lewat tanggalnya,
+   BUKAN "yang belum dibayar". Itu keterbatasan sumber, dan UI mengatakannya
+   apa adanya. */
+function hutangBaris(r) {
+  /* Satu baris cicilan: nomor + jatuh tempo di kiri, nominal di kanan.
+     Memakai .baris + .baris-nama + .angka-baris yang sudah ada.
+
+     Cicilan yang sudah LUNAS (r.lunas) tetap DITAMPILKAN, tapi DICORET
+     (strikethrough) dan diberi lencana "LUNAS" — bukan dihapus (keputusan
+     Deny). Teks dicoret tetap wajib terbaca, jadi warnanya memakai pasangan
+     aksesibel yang sudah dipakai di panel ini: text-gray-500 di mode terang
+     (4,84:1 di atas putih) dan dark:text-gray-400 di mode gelap (6,82:1 di
+     atas gray-900). Keduanya >=4,5:1 (WCAG AA) — tidak mengulang kasus F-3.
+     Garis coret dipasang lewat inline style supaya nol ubah tailwind.css.
+     Jarak baris ditambah lewat utility `py-4` (14->16px) yang HANYA
+     dipasang di baris cicilan hutang, supaya tab Daftar (yang memakai
+     .baris yang sama) tidak ikut berubah. */
+  const li = el('li', 'baris py-4');
+  const kiri = el('div', 'min-w-0 flex-1');
+  const nama = el('p', 'baris-nama m-0 mb-2 font-medium',
+    r.nomor + '. ' + r.jatuh_tempo_teks);
+  if (r.lunas) nama.classList.add('text-gray-500', 'dark:text-gray-400');
+  kiri.appendChild(nama);
+  if (r.lunas) {
+    const barisLencana = el('div', 'flex flex-wrap items-center gap-3');
+    barisLencana.appendChild(el('span', 'lencana lencana-income', 'LUNAS'));
+    if (r.lunas_pada) {
+      barisLencana.appendChild(el('span',
+        'text-[11px] text-gray-500 dark:text-gray-400',
+        'ditandai ' + String(r.lunas_pada).slice(0, 10)));
+    }
+    kiri.appendChild(barisLencana);
+  }
+  li.appendChild(kiri);
+  const nominal = el('div', 'shrink-0 text-right angka-baris', rupiah(r.nominal));
+  if (r.lunas) nominal.classList.add('text-gray-500', 'dark:text-gray-400');
+  li.appendChild(nominal);
+  if (r.lunas) {
+    /* coret: garis lewat teks, tapi teksnya sendiri tetap berwarna aksesibel */
+    [nama, nominal].forEach((n) => { n.style.textDecoration = 'line-through'; });
+  }
+  return li;
+}
+
+/* Penghitung `id` unik untuk `<ul>` rincian lipatan di tab Hutang. Dipakai
+   oleh aria-controls -> id. Bertambah tiap render; `id` hanya perlu unik di
+   DOM saat itu (renderHutang membuang node lama sebelum menggambar ulang). */
+let urutLipatHutang = 0;
+/* Durasi animasi lipatan Hutang (ms). HARUS sinkron dengan .lipat-hutang-isi
+   di web/src.css. Dipakai sebagai fallback timer — bukan mengandalkan
+   transitionend, yang bisa tak terpicu kalau elemen berubah cepat. */
+const DURASI_LIPAT = 240;
+
+function hutangKartu(u) {
+  /* py-6 menambah padding vertikal (20->24px) HANYA di kartu hutang;
+     `.kartu` sendiri tidak diubah supaya tab lain tidak ikut. */
+  const kartu = el('div', 'kartu py-6');
+  kartu.appendChild(el('p', 'm-0 text-sm font-semibold', u.nama));
+
+  /* Baris ringkas: jumlah cicilan + TOTAL SISA per utang (angka dari server).
+     `total_sisa` = total - yang sudah lunas. Kalau server versi lama belum
+     mengirimnya (field tak ada), jatuh ke `total` supaya tidak menampilkan
+     NaN — tapi tidak menghitung sendiri. */
+  const sisa = (typeof u.total_sisa === 'number') ? u.total_sisa : u.total;
+  const ringkas = el('p', 'mt-2 mb-0 text-[13px] text-gray-500 dark:text-gray-400',
+    u.jumlah_cicilan + ' cicilan · sisa ' + rupiah(sisa));
+  kartu.appendChild(ringkas);
+
+  /* Berapa cicilan yang sudah lunas dari total (angka dari server). */
+  if (u.jumlah_lunas > 0) {
+    kartu.appendChild(el('p', 'mt-2 mb-0 text-[13px] text-(--color-income)',
+      u.jumlah_lunas + ' dari ' + u.jumlah_cicilan + ' cicilan lunas'));
+  }
+
+  /* Cicilan berikutnya. Kalau null -> kalimat, BUKAN angka 0. */
+  const next = el('p', 'mt-3 mb-0 text-[13px] leading-snug');
+  if (u.cicilan_berikutnya) {
+    next.appendChild(el('span', 'text-gray-500 dark:text-gray-400', 'Cicilan berikutnya: '));
+    next.appendChild(el('span', 'font-semibold', rupiah(u.cicilan_berikutnya.nominal)));
+    next.appendChild(el('span', 'text-gray-500 dark:text-gray-400',
+      ' · ' + u.cicilan_berikutnya.jatuh_tempo_teks));
+  } else {
+    next.appendChild(el('span', 'text-gray-500 dark:text-gray-400',
+      'Semua cicilan sudah lewat tanggal.'));
+  }
+  kartu.appendChild(next);
+
+  /* Detail semua cicilan, dilipat default tertutup. Tetap memakai kelas
+     bersama .txgroup-head + .chevron-lipat (konsisten dengan lipatan di layar
+     Daftar), TAPI ditambah modifier KHUSUS HUTANG `.lipat-hutang` +
+     `.lipat-hutang-isi` supaya animasi/hover hanya berlaku di tab Hutang —
+     kelas bersama tidak disentuh (tab Daftar tetap apa adanya). */
+  /* ARIA disclosure yang benar: tombol `aria-expanded` (sudah ada) +
+     `aria-controls` -> `id` pada `<ul>` rincian. Chevron sudah `aria-hidden`
+     (dari ikon()). Ini BUKAN listbox — tak ada daftar opsi / nilai terpilih,
+     jadi role="listbox"/"option" salah semantik di sini dan TIDAK dipakai.
+     Modifier `.lipat-hutang` khusus instance Hutang; kelas bersama
+     `.txgroup-head`/`.chevron-lipat` (juga dipakai tab Daftar) tidak disentuh. */
+  const idRincian = 'rincian-hutang-' + (++urutLipatHutang);
+  const head = el('button', 'txgroup-head lipat-hutang mt-4');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  head.setAttribute('aria-controls', idRincian);
+  const kiri = el('span', 'flex min-w-0 items-center gap-1.5');
+  const chev = el('span', 'chevron-lipat shrink-0');
+  chev.appendChild(ikon('lipat'));
+  kiri.appendChild(chev);
+  kiri.appendChild(el('span', 'normal-case tracking-normal font-normal',
+    'Rincian ' + u.jumlah_cicilan + ' cicilan'));
+  head.appendChild(kiri);
+  kartu.appendChild(head);
+
+  const list = el('ul', 'lipat-hutang-isi m-0 list-none p-0 kartu kartu-rapat');
+  list.id = idRincian;
+  list.hidden = true;
+  u.baris.forEach((r) => list.appendChild(hutangBaris(r)));
+  kartu.appendChild(list);
+
+  /* Buka-tutup beranimasi: tinggi (max-height 0 -> tinggi isi terukur) +
+     opasitas; panah diputar 180° oleh aturan bersama
+     `.txgroup-head[aria-expanded='true'] .chevron-lipat` (sudah ada).
+     Timer DURASI_LIPAT = jaring aman supaya `hidden` tetap dipasang walau
+     `transitionend` tak terpicu (tab tak terlihat / gerak dikurangi). Saat
+     `prefers-reduced-motion: reduce`, CSS mematikan transisi → lipatan tetap
+     berfungsi, hanya tanpa gerak. */
+  let timerLipat = null;
+  head.addEventListener('click', () => {
+    const akanBuka = list.hidden;
+    if (timerLipat) { clearTimeout(timerLipat); timerLipat = null; }
+    if (akanBuka) {
+      list.hidden = false;
+      /* Paksa reflow: elemen baru keluar dari `hidden` (display:none). Tanpa
+         pembacaan layout ini, browser bisa melewatkan transisi (dari keadaan
+         display:none tak ada nilai awal untuk dianimasikan). */
+      void list.offsetHeight;
+      /* scrollHeight = tinggi isi penuh walau sedang terpotong max-height:0 */
+      list.style.maxHeight = list.scrollHeight + 'px';
+      list.classList.add('lipat-hutang-buka');
+    } else {
+      list.style.maxHeight = '0px';
+      list.classList.remove('lipat-hutang-buka');
+      timerLipat = setTimeout(() => {
+        list.hidden = true;
+        timerLipat = null;
+      }, DURASI_LIPAT);
+    }
+    head.setAttribute('aria-expanded', akanBuka ? 'true' : 'false');
+  });
+  return kartu;
+}
+
+async function renderHutang() {
+  const host = $('hutang-host');
+  const ringkas = $('hutang-ringkas');
+  if (!host) return;
+  host.textContent = '';
+  if (ringkas) ringkas.textContent = '';
+
+  let d;
+  try {
+    d = await apiGet('/debts');
+  } catch (e) {
+    /* Endpoint tidak menjawab (mis. server versi lama -> 404, atau koneksi
+       mati). Katakan dengan jelas; jangan biarkan halaman kosong. */
+    const kotak = el('div', 'kartu');
+    kotak.appendChild(el('p', 'm-0 mb-1 text-sm font-semibold',
+      'Tidak bisa memuat jadwal hutang'));
+    kotak.appendChild(el('p', 'm-0 text-[13px] leading-snug text-gray-500 dark:text-gray-400',
+      'Server tidak menjawab /api/debts. Kalau server belum dijalankan ulang '
+      + 'setelah endpoint ini ditambahkan, itu penyebabnya. Datamu tidak '
+      + 'terpengaruh — tidak ada berkas yang diubah.'));
+    host.appendChild(kotak);
+    return;
+  }
+
+  /* Server membalas ok:false saat berkas hilang atau formatnya berubah.
+     Tampilkan pesannya apa adanya — bukan tabel kosong tanpa keterangan. */
+  if (!d || d.ok === false) {
+    const kotak = el('div', 'kartu');
+    kotak.appendChild(el('p', 'm-0 mb-1 text-sm font-semibold',
+      'Jadwal hutang tidak bisa ditampilkan'));
+    kotak.appendChild(el('p', 'm-0 text-[13px] leading-snug text-(--color-expense)',
+      (d && d.message) || 'Server tidak memberi keterangan.'));
+    host.appendChild(kotak);
+    return;
+  }
+
+  /* Kartu ringkasan: total SISA + jumlah utang + berapa cicilan lunas.
+     Semua angka dari server (`total_sisa_semua`, `total_lunas_semua`).
+     `total_sisa_semua` belum ada di server versi lama -> jatuh ke
+     `total_semua` supaya tidak menampilkan NaN. */
+  if (ringkas) {
+    const totalSisa = (typeof d.total_sisa_semua === 'number')
+      ? d.total_sisa_semua : d.total_semua;
+    const totalLunas = (typeof d.total_lunas_semua === 'number')
+      ? d.total_lunas_semua : 0;
+    const k = el('div', 'kartu py-6');
+    k.appendChild(el('p', 'eyebrow m-0', 'Total sisa cicilan'));
+    k.appendChild(el('p', 'angka-besar mt-1 mb-0', rupiah(totalSisa)));
+    k.appendChild(el('p', 'mt-2 mb-0 text-[13px] text-gray-500 dark:text-gray-400',
+      d.jumlah_utang + ' utang · diukur ' + d.hari_ini));
+
+    /* Jumlah cicilan lunas dari total. Dihitung dari `utang[]` (angka server),
+       bukan dari daftar transaksi — UI tidak menghitung angka keuangan. */
+    if (totalLunas > 0) {
+      let jmlLunas = 0, jmlCicilan = 0;
+      (d.utang || []).forEach((u) => {
+        jmlLunas += (u.jumlah_lunas || 0);
+        jmlCicilan += (u.jumlah_cicilan || 0);
+      });
+      k.appendChild(el('p', 'mt-2 mb-0 text-[13px] font-medium text-(--color-income)',
+        jmlLunas + ' dari ' + jmlCicilan + ' cicilan lunas · '
+        + rupiah(totalLunas) + ' sudah dibayar'));
+    }
+
+    /* Entri "yatim": ditandai lunas tapi tak ada lagi di jadwal (mis. Deny
+       menyunting LIST-HUTANG.md). Dilaporkan apa adanya; tidak dihitung. */
+    if (d.yatim && d.yatim.length) {
+      k.appendChild(el('p', 'mt-3 mb-0 text-[11px] text-(--color-debt)',
+        d.yatim.length + ' penandaan lunas tidak lagi ada di jadwal (diabaikan).'));
+    }
+
+    k.appendChild(el('p', 'mt-3 mb-0 text-[11px] text-gray-500 dark:text-gray-400',
+      'Sumber: ' + d.sumber + ' (baca saja). Sisa = total jadwal dikurangi '
+      + 'cicilan yang sudah ditandai lunas.'));
+    ringkas.appendChild(k);
+  }
+
+  (d.utang || []).forEach((u) => host.appendChild(hutangKartu(u)));
+}
+
+/* Banner "Cicilan X ditandai lunas" + tombol Batalkan.
+   Muncul setelah transaksi disimpan (dipanggil dari renderDraft/openManual
+   saat balasan /api/save memuat `hutang_lunas`). Tombol Batalkan memanggil
+   POST /api/debts/batalkan, lalu menyegarkan tab Hutang.
+
+   Kenapa banner, bukan toast: toast() auto-hilang 4,2 detik dan tak bisa
+   memuat tombol. Banner ini tetap ada sampai dibatalkan/ditutup supaya Deny
+   punya kesempatan membatalkan. */
+function hutangLunasBaru(daftar) {
+  if (!daftar || !daftar.length) return;
+  /* Host global (di luar tab) supaya banner terlihat dari tab Catat MAUPUN
+     Hutang. Jatuh ke #hutang-ringkas kalau host global tak ada (harness). */
+  const host = $('hutang-lunas-host') || $('hutang-ringkas');
+  if (!host) return;   /* tak ada host -> jangan melempar */
+
+  daftar.forEach((h) => {
+    const kotak = el('div', 'kartu');
+    kotak.setAttribute('role', 'status');
+    kotak.appendChild(el('p', 'm-0 text-sm font-semibold',
+      'Cicilan ' + h.nama_utang + ' ditandai lunas'));
+
+    const rinci = el('p', 'mt-1 mb-0 text-[13px] text-gray-500 dark:text-gray-400',
+      'Cicilan ke-' + h.nomor + ' · ' + rupiah(h.nominal));
+    kotak.appendChild(rinci);
+
+    const row = el('div', 'mt-3 flex flex-wrap gap-3');
+    const batal = el('button', 'tombol tombol-hantu tombol-kecil', 'Batalkan');
+    batal.type = 'button';
+    batal.addEventListener('click', async () => {
+      setBusy(batal, true);
+      let res;
+      try {
+        res = await apiPost('/debts/batalkan',
+          { nama_utang: h.nama_utang, jatuh_tempo: h.jatuh_tempo });
+      } catch (e) {
+        if (String(e && e.message) === 'sesi_berakhir') return;
+        res = { ok: false, message: 'Server tidak menjawab.' };
+      }
+      if (!res || res.ok === false) {
+        setBusy(batal, false);
+        toast((res && (res.message || res.error)) || 'Gagal membatalkan',
+          'error');
+        return;
+      }
+      kotak.remove();
+      toast('Dibatalkan: ' + h.nama_utang + ' · cicilan ke-' + h.nomor);
+      /* Segarkan tab Hutang supaya baris tercoret & total sisa kembali. */
+      renderHutang().catch(() => {});
+    });
+    row.appendChild(batal);
+
+    const tutup = el('button', 'tombol tombol-hantu tombol-kecil', 'Tutup');
+    tutup.type = 'button';
+    tutup.addEventListener('click', () => kotak.remove());
+    row.appendChild(tutup);
+
+    kotak.appendChild(row);
+    host.appendChild(kotak);
+  });
+}
+
 /* ══ Navigasi (navbar atas) ═══════════════════════════════════════════════
    Satu set tombol saja. Dulu ada bottom bar terpisah; sekarang tidak. */
 function showTab(name) {
   const sebelumnya = state.tab;
   state.tab = name;
 
-  ['home', 'catat', 'daftar', 'akun', 'analisa'].forEach((n) => {
+  ['home', 'catat', 'daftar', 'akun', 'analisa', 'hutang'].forEach((n) => {
     const v = $('view-' + n);
     if (!v) return;
     const tampil = (n === name);
@@ -2648,6 +3320,22 @@ function showTab(name) {
           host.textContent = '';
           host.appendChild(el('p', 'kartu text-sm leading-snug',
             'Tidak bisa memuat analisa. Coba muat ulang halaman.'));
+        }
+      }
+    });
+  }
+  /* Hutang juga dimuat saat tabnya dibuka, bukan saat panel dimuat — pola yang
+     sama dengan Analisa. Kalau gagal (mis. server versi lama yang belum punya
+     /api/debts, atau sesi berakhir), halamannya menampilkan keterangan yang
+     jelas; TIDAK dibiarkan kosong tanpa penjelasan. */
+  if (name === 'hutang' && sebelumnya !== 'hutang') {
+    renderHutang().catch((e) => {
+      if (String(e && e.message) !== 'sesi_berakhir') {
+        const host = $('hutang-host');
+        if (host) {
+          host.textContent = '';
+          host.appendChild(el('p', 'kartu text-sm leading-snug',
+            'Tidak bisa memuat jadwal hutang. Coba muat ulang halaman.'));
         }
       }
     });
@@ -2765,6 +3453,10 @@ async function refresh() {
        : `Belum ada data · ${monthLabel(s.month)}`);
 
   drawChart(await loadTrend(s.month));
+  /* Kartu pengeluaran per kategori — bulan yang sedang dilihat panel.
+     Ditaruh setelah grafik tren: tren menjawab "bagaimana keadaanku
+     sepanjang waktu", kategori menjawab "apa yang harus kuubah". */
+  await renderKategori();
 }
 
 /* ══ Panel cek jaringan AI (halaman Catat) ═════════════════════════════════
@@ -3462,7 +4154,7 @@ async function renderAnalisa(bulanDipilih) {
 
     if (d.saran.catatan) {
       ks.appendChild(el('p', 'mt-3 mb-0 border-t border-gray-100 pt-3 text-[11px] '
-        + 'leading-snug text-gray-400 dark:border-gray-800 dark:text-gray-500',
+        + 'leading-snug text-gray-500 dark:border-gray-800 dark:text-gray-400',
         d.saran.catatan));
     }
     host.appendChild(ks);

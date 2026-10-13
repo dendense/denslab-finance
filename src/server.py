@@ -163,7 +163,24 @@ def api_save(body):
         ids = db.save_transactions(items)
     except Exception as e:
         return {"ok": False, "error": "gagal_simpan", "message": str(e)}
-    return {"ok": True, "saved_ids": ids, "count": len(ids)}
+
+    # Transaksi SUDAH pasti tersimpan (save_transactions all-or-nothing).
+    # Cocokkan nominal ke jadwal hutang & tandai cicilan yang cocok LUNAS.
+    # Dibungkus try/except: kegagalan APA PUN di sini TIDAK boleh merusak
+    # penyimpanan transaksi — transaksi tetap tersimpan, fitur ini hanya bonus.
+    lunas_baru = []
+    try:
+        lunas_baru = _tandai_lunas_untuk(items, ids)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("[hutang-lunas] penandaan otomatis dilewati: %s: %s"
+              % (type(e).__name__, e), flush=True)
+
+    hasil = {"ok": True, "saved_ids": ids, "count": len(ids)}
+    if lunas_baru:
+        hasil["hutang_lunas"] = lunas_baru
+    return hasil
 
 
 def api_categories(params):
@@ -423,6 +440,418 @@ def api_savings_delete():
         return {"ok": False, "error": "tidak_ada_target",
                 "message": "Belum ada target tabungan yang aktif."}
     return {"ok": True, "diarsipkan": True}
+
+
+# ── jadwal cicilan per utang (baca LIST-HUTANG.md, READ-ONLY) ────────────────
+class _GagalHutang(Exception):
+    """Kegagalan yang bisa dibaca UI: kode + pesan Bahasa Indonesia."""
+
+    def __init__(self, kode, pesan):
+        super().__init__(pesan)
+        self.kode = kode
+        self.pesan = pesan
+
+
+# Bulan Indonesia -> angka. Memuat `Ags` (bentuk yang dipakai berkas) DAN
+# `Agu` (singkatan app.js MONTH_SHORT) supaya berkas yang memakai salah satu
+# tetap terbaca; bulan di luar daftar ini = error format, bukan ditebak Januari.
+BULAN_ID = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "mei": 5, "jun": 6,
+    "jul": 7, "ags": 8, "agu": 8, "sep": 9, "okt": 10, "nov": 11, "des": 12,
+}
+BARIS_CICILAN = re.compile(
+    r"^\s*(\d+)\.\s+(\d+)\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*$")
+
+
+# ── status LUNAS: berkas TERPISAH finance-pribadi/HUTANG-LUNAS.json ──────────
+# Kenapa berkas terpisah: LIST-HUTANG.md adalah jadwal asli Deny dan TIDAK
+# boleh disentuh (nol tulis). Status lunas adalah LAPISAN di atasnya, jadi
+# disimpan di berkas sendiri. LIST-HUTANG.md tidak punya id utang, maka kunci
+# unik = (nama_utang, jatuh_tempo) — tanggal = identitas alami cicilan.
+#
+# Skema: {"versi":1,"diperbarui":ISO,"lunas":[{nama_utang,jatuh_tempo,nomor,
+#         nominal,ditandai_pada,transaksi_id,transaksi_nominal,
+#         transaksi_tanggal}, ...]}
+VERSI_LUNAS = 1
+
+
+def _kunci_lunas(nama_utang, jatuh_tempo):
+    """Kunci unik satu cicilan: (nama_utang, jatuh_tempo)."""
+    return (nama_utang, jatuh_tempo)
+
+
+def _berkas_lunas():
+    return Path(str(db.DATA_DIR)) / "HUTANG-LUNAS.json"
+
+
+def _baca_lunas():
+    """Baca HUTANG-LUNAS.json. Kembalikan daftar entri `lunas` (list of dict).
+
+    Belum ada berkas -> dianggap KOSONG (semua belum lunas) — BUKAN "semua
+    lunas". Rusak / bentuk salah -> `_GagalHutang("hutang_lunas_rusak", ...)`
+    supaya pemanggil gagal dengan pesan jelas, tidak menampilkan total salah.
+    """
+    berkas = _berkas_lunas()
+    if not berkas.is_file():
+        return []
+    try:
+        isi = berkas.read_text(encoding="utf-8")
+    except OSError as e:
+        raise _GagalHutang(
+            "hutang_lunas_rusak",
+            "Berkas status lunas tidak bisa dibaca (%s: %s). Perbaiki atau "
+            "hapus berkas itu supaya jadwal bisa ditampilkan."
+            % (type(e).__name__, e))
+    if not isi.strip():
+        # Berkas kosong = belum ada penandaan. Aman, bukan "semua lunas".
+        return []
+    try:
+        data = json.loads(isi)
+    except json.JSONDecodeError as e:
+        raise _GagalHutang(
+            "hutang_lunas_rusak",
+            "Berkas status lunas rusak (JSON tidak valid: %s). Penandaan "
+            "otomatis dilewati; perbaiki atau hapus berkas itu." % e)
+    if not isinstance(data, dict) or not isinstance(data.get("lunas"), list):
+        raise _GagalHutang(
+            "hutang_lunas_rusak",
+            "Berkas status lunas bentuknya tidak dikenal (harus punya kunci "
+            "'lunas' berisi daftar). Penandaan otomatis dilewati.")
+    entri = []
+    for i, e in enumerate(data["lunas"], 1):
+        if not isinstance(e, dict) or not e.get("nama_utang") \
+                or not e.get("jatuh_tempo"):
+            raise _GagalHutang(
+                "hutang_lunas_rusak",
+                "Berkas status lunas rusak: entri ke-%d tidak punya "
+                "'nama_utang'/'jatuh_tempo'. Penandaan otomatis dilewati." % i)
+        entri.append(e)
+    return entri
+
+
+def _tulis_lunas(entri):
+    """Tulis HUTANG-LUNAS.json secara ATOMIK (*.tmp + os.replace).
+
+    Atomik supaya berkas tidak pernah setengah tertulis kalau proses berhenti
+    di tengah. Nol sentuh LIST-HUTANG.md / finance.db.
+    """
+    berkas = _berkas_lunas()
+    berkas.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "versi": VERSI_LUNAS,
+        "diperbarui": _sekarang_iso(),
+        "lunas": entri,
+    }
+    sementara = berkas.with_suffix(berkas.suffix + ".tmp")
+    sementara.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                         encoding="utf-8")
+    os.replace(sementara, berkas)
+    return data
+
+
+def _sekarang_iso():
+    from datetime import datetime as _dt
+    return _dt.now().replace(microsecond=0).isoformat()
+
+
+def _tandai_lunas_untuk(items, ids):
+    """Cocokkan transaksi yang BARU disimpan ke cicilan; tandai yang cocok LUNAS.
+
+    Aturan (keputusan Deny):
+    - HANYA transaksi `flow_type='debt_payment'` yang memicu.
+    - Nominal PERSIS (`amount` integer, toleransi NOL).
+    - Kandidat = cicilan yang `nominal == amount` DAN belum lunas.
+    - Pilih yang JATUH TEMPO paling awal (tie: nama_utang, lalu nomor).
+    - Satu transaksi -> satu cicilan.
+    - Tak ada cocok -> tidak terjadi apa-apa.
+    - Sudah lunas sebelumnya -> bukan kandidat.
+
+    Mengembalikan daftar penandaan baru: [{nama_utang,jatuh_tempo,nomor,
+    nominal,transaksi_id,transaksi_nominal,transaksi_tanggal}, ...].
+
+    Kalau HUTANG-LUNAS.json rusak -> `_GagalHutang` (pemanggil menangkapnya dan
+    melewati penandaan; transaksi tetap tersimpan). Pemanggil WAJIB membungkus
+    ini dengan try/except supaya kegagalan apa pun tidak merusak penyimpanan.
+    """
+    hasil = _baca_hutang()          # jadwal dari LIST-HUTANG.md (read-only)
+    entri = _baca_lunas()           # status lunas yang sudah ada
+    sudah = {_kunci_lunas(e["nama_utang"], e["jatuh_tempo"]) for e in entri}
+
+    # Kandidat belum-lunas, urut jatuh tempo -> nama -> nomor.
+    kandidat = []
+    for u in hasil["utang"]:
+        for r in u["baris"]:
+            if _kunci_lunas(u["nama"], r["jatuh_tempo"]) in sudah:
+                continue
+            kandidat.append({
+                "nama_utang": u["nama"],
+                "jatuh_tempo": r["jatuh_tempo"],
+                "nomor": r["nomor"],
+                "nominal": r["nominal"],
+            })
+    kandidat.sort(key=lambda c: (c["jatuh_tempo"], c["nama_utang"], c["nomor"]))
+
+    baru = []
+    for it, tx_id in zip(items, ids):
+        if (it.get("flow_type") or "") != "debt_payment":
+            continue
+        try:
+            amount = int(it.get("amount"))
+        except (TypeError, ValueError):
+            continue
+        # Cari kandidat pertama (paling awal) yang nominalnya persis & belum
+        # dipakai di iterasi ini.
+        terpakai = {_kunci_lunas(b["nama_utang"], b["jatuh_tempo"]) for b in baru}
+        pilih = None
+        for c in kandidat:
+            k = _kunci_lunas(c["nama_utang"], c["jatuh_tempo"])
+            if k in terpakai:
+                continue
+            if c["nominal"] == amount:
+                pilih = c
+                break
+        if pilih is None:
+            continue
+        baru.append({
+            "nama_utang": pilih["nama_utang"],
+            "jatuh_tempo": pilih["jatuh_tempo"],
+            "nomor": pilih["nomor"],
+            "nominal": pilih["nominal"],
+            "ditandai_pada": _sekarang_iso(),
+            "transaksi_id": tx_id,
+            "transaksi_nominal": amount,
+            "transaksi_tanggal": it.get("occurred_on"),
+        })
+
+    if baru:
+        _tulis_lunas(entri + baru)
+    return baru
+
+
+def api_debts_batalkan(body):
+    """POST /api/debts/batalkan — batalkan (unmark) satu cicilan yang ditandai lunas.
+
+    Body: {"nama_utang": <str>, "jatuh_tempo": <ISO 'YYYY-MM-DD'>}.
+    Balasan sukses: {"ok": true, "dibatalkan": {...}}.
+    Tak ada yang ditandai untuk kunci itu: {"ok": false, "error": "tidak_ditandai"}.
+    Berkas rusak: {"ok": false, "error": "hutang_lunas_rusak", ...}.
+    """
+    nama_utang = (body.get("nama_utang") or "").strip()
+    jatuh_tempo = (body.get("jatuh_tempo") or "").strip()
+    if not nama_utang or not jatuh_tempo:
+        return {"ok": False, "error": "field_kurang",
+                "message": "Butuh 'nama_utang' dan 'jatuh_tempo'."}
+    try:
+        entri = _baca_lunas()
+    except _GagalHutang as e:
+        return {"ok": False, "error": e.kode, "message": e.pesan}
+
+    kunci = _kunci_lunas(nama_utang, jatuh_tempo)
+    sisa, dibatalkan = [], None
+    for e in entri:
+        if _kunci_lunas(e["nama_utang"], e["jatuh_tempo"]) == kunci:
+            dibatalkan = e
+        else:
+            sisa.append(e)
+    if dibatalkan is None:
+        return {"ok": False, "error": "tidak_ditandai",
+                "message": "Cicilan itu tidak sedang ditandai lunas."}
+    _tulis_lunas(sisa)
+    return {"ok": True, "dibatalkan": {
+        "nama_utang": dibatalkan.get("nama_utang"),
+        "jatuh_tempo": dibatalkan.get("jatuh_tempo"),
+        "nomor": dibatalkan.get("nomor"),
+        "nominal": dibatalkan.get("nominal"),
+    }}
+
+
+def _baca_hutang():
+    """Baca LIST-HUTANG.md read-only, kembalikan jadwal cicilan terstruktur.
+
+    SEMUA angka (total per utang, jumlah cicilan, total semua, cicilan
+    berikutnya) dihitung DI SINI, bukan di UI — CONTRACT.md: UI tidak pernah
+    menghitung angka keuangan. UI hanya memformat yang sudah jadi.
+
+    Gagal KERAS dengan pesan jelas kalau berkas hilang atau formatnya berubah:
+    halaman kosong tanpa keterangan persis yang dilarang kartu ini.
+
+    Nol tulis ke berkas sumber, nol SQL, nol tabel baru.
+    """
+    from datetime import date as _date
+
+    berkas = Path(str(db.DATA_DIR)) / "LIST-HUTANG.md"
+    if not berkas.is_file():
+        raise _GagalHutang(
+            "berkas_tidak_ada",
+            "Berkas jadwal hutang tidak ditemukan di %s. Tidak ada yang bisa "
+            "ditampilkan." % berkas)
+    try:
+        isi = berkas.read_text(encoding="utf-8")
+    except OSError as e:
+        raise _GagalHutang(
+            "berkas_tidak_terbaca",
+            "Berkas jadwal hutang tidak bisa dibaca (%s: %s)."
+            % (type(e).__name__, e))
+
+    hari_ini = _date.today()
+    utang = []
+    bagian = None            # bagian yang sedang diisi
+    ada_judul = False
+    nomor_baris = 0
+
+    for baris in isi.splitlines():
+        nomor_baris += 1
+        if baris.startswith("## "):
+            nama = baris[3:].strip()
+            if not nama:
+                continue
+            bagian = {"nama": nama, "baris": []}
+            utang.append(bagian)
+            ada_judul = True
+            continue
+        if baris.startswith("#"):
+            continue          # judul berkas (satu '#')
+        if not baris.strip():
+            continue
+
+        m = BARIS_CICILAN.match(baris)
+        if not m:
+            # Baris non-kosong di dalam bagian yang tidak cocok = format berubah.
+            if bagian is not None:
+                raise _GagalHutang(
+                    "format_berubah",
+                    "Baris %d tidak bisa dibaca sebagai cicilan "
+                    "(contoh: '1. 1803272 11 Nov 2026'): %r"
+                    % (nomor_baris, baris.strip()[:60]))
+            continue
+
+        if bagian is None:
+            raise _GagalHutang(
+                "format_berubah",
+                "Baris %d berisi cicilan tapi belum ada judul '## <nama "
+                "utang>' di atasnya." % nomor_baris)
+
+        nomor, nominal, hari, bulan_teks, tahun = m.groups()
+        bulan = BULAN_ID.get(bulan_teks.lower())
+        if bulan is None:
+            raise _GagalHutang(
+                "format_berubah",
+                "Baris %d: bulan '%s' tidak dikenal (harus Jan..Des / "
+                "Ags / Okt)." % (nomor_baris, bulan_teks))
+        try:
+            jatuh = _date(int(tahun), bulan, int(hari))
+        except ValueError as e:
+            raise _GagalHutang(
+                "format_berubah",
+                "Baris %d: tanggal tidak sah (%s)." % (nomor_baris, e))
+
+        bagian["baris"].append({
+            "nomor": int(nomor),
+            "nominal": int(nominal),
+            "jatuh_tempo": jatuh.isoformat(),
+            "jatuh_tempo_teks": "%d %s %d" % (int(hari), bulan_teks, int(tahun)),
+            "_tanggal": jatuh,
+        })
+
+    if not ada_judul:
+        raise _GagalHutang(
+            "format_berubah",
+            "Format LIST-HUTANG.md berubah: tidak ada satu pun judul "
+            "'## <nama utang>'. Halaman tidak dibangun dari format yang tidak "
+            "dikenal.")
+
+    hasil = []
+    total_semua = 0
+    for b in utang:
+        if not b["baris"]:
+            raise _GagalHutang(
+                "format_berubah",
+                "Bagian '%s' tidak punya baris cicilan yang bisa dibaca."
+                % b["nama"])
+        baris_urut = sorted(b["baris"], key=lambda r: (r["_tanggal"], r["nomor"]))
+        total = sum(r["nominal"] for r in baris_urut)
+        total_semua += total
+        hasil.append({
+            "nama": b["nama"],
+            "jumlah_cicilan": len(baris_urut),
+            "total": total,
+            "jatuh_tempo_terakhir": baris_urut[-1]["jatuh_tempo"],
+            "baris": [{k: v for k, v in r.items() if k != "_tanggal"}
+                      for r in baris_urut],
+        })
+
+    # ── campur status LUNAS (dari HUTANG-LUNAS.json, berkas TERPISAH) ────────
+    # Dicampur DI SINI supaya UI hanya memformat (CONTRACT.md). Kalau berkas
+    # lunas rusak, `_baca_lunas()` melempar `_GagalHutang` -> `api_debts()`
+    # membalas error yang jelas, BUKAN total yang salah.
+    entri_lunas = _baca_lunas()
+    kunci_lunas = {_kunci_lunas(e["nama_utang"], e["jatuh_tempo"]): e
+                   for e in entri_lunas}
+    peta_cicilan = {}
+    for u in hasil:
+        for r in u["baris"]:
+            peta_cicilan[_kunci_lunas(u["nama"], r["jatuh_tempo"])] = r
+    # Entri "yatim": ditandai lunas tapi tidak ada lagi di jadwal (mis. Deny
+    # menyunting LIST-HUTANG.md). Dilaporkan, TIDAK dihitung ke total mana pun.
+    yatim = sorted(k for k in kunci_lunas if k not in peta_cicilan)
+
+    hari_ini_teks = hari_ini.isoformat()
+    total_lunas_semua = 0
+    for u in hasil:
+        jumlah_lunas = 0
+        total_lunas = 0
+        for r in u["baris"]:
+            e = kunci_lunas.get(_kunci_lunas(u["nama"], r["jatuh_tempo"]))
+            r["lunas"] = e is not None
+            if e is not None:
+                r["lunas_pada"] = e.get("ditandai_pada")
+                r["lunas_transaksi_id"] = e.get("transaksi_id")
+                jumlah_lunas += 1
+                total_lunas += r["nominal"]
+        u["jumlah_lunas"] = jumlah_lunas
+        u["total_sisa"] = u["total"] - total_lunas
+        total_lunas_semua += total_lunas
+        # `cicilan_berikutnya` = cicilan BELUM LUNAS paling dekat (keputusan
+        # Deny #2: "berikutnya" melewati yang sudah lunas). Nama & bentuk field
+        # TIDAK berubah supaya UI yuki tidak perlu ikut berubah.
+        berikutnya = None
+        for r in u["baris"]:
+            if r["lunas"]:
+                continue
+            if r["jatuh_tempo"] >= hari_ini_teks:
+                berikutnya = {
+                    "nomor": r["nomor"], "nominal": r["nominal"],
+                    "jatuh_tempo": r["jatuh_tempo"],
+                    "jatuh_tempo_teks": r["jatuh_tempo_teks"],
+                }
+                break
+        u["cicilan_berikutnya"] = berikutnya
+
+    return {
+        "ok": True,
+        "sumber": "finance-pribadi/LIST-HUTANG.md",
+        "hari_ini": hari_ini_teks,
+        "jumlah_utang": len(hasil),
+        "total_semua": total_semua,
+        "total_lunas_semua": total_lunas_semua,
+        "total_sisa_semua": total_semua - total_lunas_semua,
+        "yatim": yatim,
+        "utang": hasil,
+    }
+
+
+def api_debts(params):
+    """GET /api/debts — jadwal cicilan per utang dari LIST-HUTANG.md.
+
+    Baca-saja: nol tulis ke berkas sumber, nol SQL, nol tabel baru. Semua
+    agregat dihitung di server; UI hanya memformat. Kalau berkas hilang atau
+    formatnya berubah, balas `{"ok": false, ...}` dengan pesan jelas supaya UI
+    menampilkan keterangan, bukan layar kosong.
+    """
+    try:
+        return _baca_hutang()
+    except _GagalHutang as e:
+        return {"ok": False, "error": e.kode, "message": e.pesan}
 
 
 # ── autentikasi ──────────────────────────────────────────────────────────────
@@ -734,6 +1163,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/suggestions": api_suggestions,
             "/api/analysis": api_analysis,
             "/api/savings": api_savings,
+            "/api/debts": api_debts,
             "/api/months": api_months,
             "/api/ai-status": api_ai_status,
             "/api/auth": api_auth_status,
@@ -772,6 +1202,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, self._jalankan(api_parse, body))
         if parsed.path == "/api/save":
             return self._send(200, self._jalankan(api_save, body))
+        if parsed.path == "/api/debts/batalkan":
+            return self._send(200, self._jalankan(api_debts_batalkan, body))
         if parsed.path == "/api/accounts":
             return self._send(200, self._jalankan(api_account_create, body))
         if parsed.path == "/api/analysis":

@@ -369,6 +369,149 @@ cek("baris salinan TIDAK bertambah setelah bentuk salah",
     hitung(SALINAN), sebelum_bentuk)
 
 
+# ── (b7) FIELD NILAI NON-STRING DARI PARSER — kode, bukan exception ─────────
+# Ditemukan di review ronde 5 (lensa Kontrak): kelas "modul memakai KODE, bukan
+# exception" belum tuntas. `_cocokkan_akun()` (dipanggil dari draft() untuk
+# `account_hint`/`to_account_hint`) dan `render_draft()` (`occurred_on`) masih
+# memanggil `.strip()`/`+` pada nilai non-string, jadi keluaran model yang wajar
+# (account_hint berupa angka, occurred_on berupa angka) melempar AttributeError/
+# TypeError ke pemanggil dan mematikan CLI. Fail-closed (nol baris tersimpan),
+# tapi tetap cacat kontrak. Regresi ini mengunci: nilai non-string -> draft tetap
+# menghasilkan draft/teks yang bisa ditampilkan, TANPA exception.
+print("\n(b7) nilai non-string dari parser — draft/teks, bukan exception")
+sebelum_nilai = hitung(SALINAN)
+
+# draft(): account_hint / to_account_hint non-string.
+for label_n, hint_n, to_n, flow_n in (
+        ("account_hint = 123", 123, None, "expense"),
+        ("account_hint = True", True, None, "expense"),
+        ("account_hint = ['BRI']", ["BRI"], None, "expense"),
+        ("to_account_hint = 7 (transfer)", "BRI", 7, "transfer")):
+    def _fn(t, _h=hint_n, _to=to_n, _f=flow_n):
+        return {"ok": True, "draft": {"transactions": [{
+            "direction": "out", "flow_type": _f, "amount": 45000,
+            "category": "Makan", "account_hint": _h, "to_account_hint": _to,
+            "note": "uji", "occurred_on": "2026-10-09", "assumed_date": False,
+        }], "question": None}}
+    try:
+        h_n = chat_gate.draft("makan 45000", path=SALINAN, parse_fn=_fn)
+        cek_benar("draft() %s -> ok True tanpa exception" % label_n,
+                  (h_n or {}).get("ok") is True)
+    except Exception as e:
+        cek_benar("draft() %s -> tanpa exception (lempar %r)" % (label_n, e), False)
+
+# render_draft(): occurred_on non-string + assumed_date truthy -> tidak melempar.
+for label_r, occ_r in (("occurred_on = 20261009", 20261009),
+                       ("occurred_on = None", None)):
+    def _fn2(t, _o=occ_r):
+        return {"ok": True, "draft": {"transactions": [{
+            "direction": "out", "flow_type": "expense", "amount": 45000,
+            "category": "Makan", "account_hint": "BRI", "to_account_hint": None,
+            "note": "uji", "occurred_on": _o, "assumed_date": True,
+        }], "question": None}}
+    try:
+        teks_r = chat_gate.render_draft(chat_gate.draft("makan 45000", path=SALINAN,
+                                                        parse_fn=_fn2))
+        cek_benar("render_draft() %s -> teks, bukan exception" % label_r,
+                  isinstance(teks_r, str) and len(teks_r) > 0)
+    except Exception as e:
+        cek_benar("render_draft() %s -> tanpa exception (lempar %r)" % (label_r, e),
+                  False)
+
+cek("baris salinan TIDAK bertambah setelah nilai non-string",
+    hitung(SALINAN), sebelum_nilai)
+
+
+# ── (b8) JALUR TAMPIL & JEJAK — kode, bukan exception ──────────────────────
+# Ditemukan di self-review ronde 6, kelas yang sama dengan (b5)/(b6)/(b7):
+# "modul memakai KODE, bukan exception" belum tuntas di dua pintu yang justru
+# paling dekat dengan chat —
+#   1. `render_draft()` (fungsi yang menampilkan draft ke chat) melempar
+#      AttributeError untuk hasil berbentuk salah, padahal `draft()` sudah
+#      menjaganya;
+#   2. `waktu` di konfirmasi tidak dijaga tipenya, padahal ia masuk jejak asal
+#      lewat `json.dumps`. Pemanggil chat yang wajar mengirim `datetime`, dan
+#      `json.dumps` melempar TypeError SESUDAH `db.save_transactions` berhasil:
+#      baris ledger TERTULIS tapi jejak asalnya hilang, dan pemanggil menerima
+#      stack trace. Itu melanggar Definisi selesai #4 ("catat asal setiap
+#      penyimpanan") dan janji docstring `simpan()`.
+# Regresi ini mengunci: keduanya harus menghasilkan teks/kode, dan jejak asal
+# harus tetap tertulis.
+print("\n(b8) jalur tampil & jejak — kode, bukan exception")
+sebelum_jalur = hitung(SALINAN)
+LOG_B8 = TMPDIR / "chat_simpan_b8.log"
+
+# render_draft(): bentuk hasil yang tidak dikenal -> teks, bukan exception.
+for label_j, arg_j in (("None", None), ("'x'", "x"), ("123", 123), ("[]", []),
+                       ("draft str", {"ok": True, "draft": "x"}),
+                       ("tx bukan list", {"ok": True, "draft": {"transactions": "x"}}),
+                       ("tx bukan dict", {"ok": True, "draft": {"transactions": [None]}})):
+    try:
+        teks_j = chat_gate.render_draft(arg_j)
+        cek_benar("render_draft(%s) -> teks, bukan exception" % label_j,
+                  isinstance(teks_j, str) and len(teks_j) > 0, repr(teks_j)[:40])
+    except Exception as e:
+        cek_benar("render_draft(%s) -> tanpa exception (lempar %r)" % (label_j, e), False)
+
+# draft(): parser yang MELEMPAR (bukan mengembalikan kode) -> kode.
+try:
+    h_j = chat_gate.draft("x", path=SALINAN,
+                          parse_fn=lambda t: (_ for _ in ()).throw(ValueError("boom")))
+    cek("draft() parser melempar -> kode", (h_j or {}).get("error"), "parser_melempar")
+except Exception as e:
+    cek_benar("draft() parser melempar -> kode (lempar %r)" % (e,), False)
+
+# perintah_diizinkan()/_normalisasi_perintah(): argumen non-teks -> False/"",
+# bukan exception. Ini penjaga yang sama, tapi dipanggil langsung (bukan lewat
+# periksa_konfirmasi) — dan di situ `_normalisasi_perintah(123)` dulu melempar
+# AttributeError karena `.lower()` dipanggil sebelum penjaga tipe.
+for label_p, arg_p in (("None", None), ("123", 123), ("['simpan']", ["simpan"]),
+                       ("{'a': 1}", {"a": 1})):
+    try:
+        cek_benar("perintah_diizinkan(%s) -> False, bukan exception" % label_p,
+                  chat_gate.perintah_diizinkan(arg_p) is False)
+    except Exception as e:
+        cek_benar("perintah_diizinkan(%s) -> tanpa exception (lempar %r)"
+                  % (label_p, e), False)
+    try:
+        cek("_normalisasi_perintah(%s) -> ''" % label_p,
+            chat_gate._normalisasi_perintah(arg_p), "")
+    except Exception as e:
+        cek_benar("_normalisasi_perintah(%s) -> tanpa exception (lempar %r)"
+                  % (label_p, e), False)
+
+# simpan(): `waktu` non-teks (termasuk datetime, yang paling wajar dari chat)
+# -> baris tersimpan DAN jejak asal tetap tertulis, tanpa exception.
+from datetime import datetime as _dt  # noqa: E402
+for label_w, waktu_w in (("datetime", _dt(2026, 10, 12, 15, 30)),
+                         ("int", 123),
+                         ("list", ["2026-10-12"]),
+                         ("dict", {"a": 1}),
+                         ("hilang", None)):
+    konf_w = {"pengirim": "deny", "kanal": "telegram", "teks": "simpan"}
+    if waktu_w is not None:
+        konf_w["waktu"] = waktu_w
+    baris_w = hitung(SALINAN)
+    try:
+        h_w = chat_gate.simpan(d, konf_w, path=SALINAN, path_log=LOG_B8)
+        cek_benar("simpan(waktu=%s) -> ok, baris +1, jejak tertulis" % label_w,
+                  h_w.get("ok") is True and hitung(SALINAN) == baris_w + 1
+                  and LOG_B8.exists() and h_w.get("jejak") == str(LOG_B8),
+                  "jejak=%s" % h_w.get("jejak"))
+    except Exception as e:
+        cek_benar("simpan(waktu=%s) -> tanpa exception (lempar %r)" % (label_w, e), False)
+
+# Jejak asal tetap terbaca dan berbentuk teks seragam.
+entri_b8 = json.loads(LOG_B8.read_text(encoding="utf-8").strip().splitlines()[-1])
+cek("jejak b8: pengirim", entri_b8["pengirim"], "deny")
+cek("jejak b8: kanal", entri_b8["kanal"], "telegram")
+cek_benar("jejak b8: waktu konfirmasi selalu berbentuk teks",
+          isinstance(entri_b8["waktu_konfirmasi"], str),
+          repr(entri_b8["waktu_konfirmasi"]))
+cek("jejak b8: satu baris per simpan berhasil",
+    len([l for l in LOG_B8.read_text().splitlines() if l.strip()]), 5)
+
+
 # ── (c) SIMPAN SETELAH BALASAN DENY BERHASIL ────────────────────────────────
 print("\n(c) simpan setelah balasan Deny berhasil")
 sebelum = hitung(SALINAN)
@@ -512,9 +655,16 @@ cek_benar("chat_gate TIDAK punya fungsi parse sendiri",
 # ── Data Deny harus TETAP UTUH ──────────────────────────────────────────────
 print("\n(6) database Deny tidak tersentuh")
 baris_deny_sesudah = hitung(DB_DENY)
-cek("finance.db Deny: baris SEBELUM", baris_deny_sebelum, 42)
+# Yang diminta kartu adalah properti `sesudah == sebelum`, BUKAN "sama dengan 42".
+# Assertion absolut `== 42` mengunci angka yang berubah setiap kali Deny mencatat
+# transaksi (perbaikan review ronde 5: suite gagal begitu finance.db Deny 46
+# baris). Uji yang bergantung pada keadaan data produksi bukan uji reproducible.
+print("  finance.db Deny SEBELUM : %d transaksi" % baris_deny_sebelum)
+print("  finance.db Deny SESUDAH : %d transaksi" % baris_deny_sesudah)
 cek("finance.db Deny: baris SESUDAH = SEBELUM",
     baris_deny_sesudah, baris_deny_sebelum)
+cek_benar("tidak ada chat_simpan.log tertinggal di folder data Deny",
+          not (DB_DENY.parent / "chat_simpan.log").exists())
 
 shutil.rmtree(TMPDIR, ignore_errors=True)
 print("\n(salinan sementara dibuang)")

@@ -880,6 +880,77 @@ mengembalikan kode: `hasil_parser_rusak` (dari `draft()`) dan `draft_tidak_sah`
 tetap `draft_kosong`, dan `draft_hasil` yang hilang tetap `draft_tidak_sah` —
 supaya kode lama tidak bergeser artinya.
 
+#### Nilai non-string dari parser ditangani, bukan melempar (perbaikan review ronde 5, 9 Okt 2026)
+
+Kelas "modul memakai kode, bukan exception" belum tuntas setelah ronde 4:
+penjaga tipe sudah dipasang untuk `flow_type` dan field konfirmasi, tapi **belum**
+untuk `account_hint`/`to_account_hint` di `_cocokkan_akun()` dan `occurred_on`
+di `render_draft()`. Keluaran model yang wajar — `account_hint` berupa angka,
+`occurred_on` berupa angka — melempar `AttributeError`/`TypeError` ke pemanggil
+dan mematikan CLI `chat_gate.main()`. Dijalankan lewat **parser nyata**
+(`parser_wrap.parse_kontrak`, hanya `chat_entry.parse` di-stub):
+
+```
+model balas account_hint = 123        -> dulu LEMPAR AttributeError, kini ok=True (akun "(belum jelas)")
+transfer to_account_hint = 7          -> dulu LEMPAR AttributeError, kini ok=True (tujuan "(belum jelas)")
+occurred_on = 20261009 + assumed_date -> dulu LEMPAR TypeError,      kini teks "20261009 (dianggap hari ini)"
+CLI main() dengan account_hint = 123  -> dulu AttributeError,        kini kode keluar 0
+```
+
+Perbaikannya: `_cocokkan_akun()` memperlakukan hint non-string **seperti hint
+kosong** (tidak ditebak, tapi juga tidak meledak), dan `render_draft()`
+mengubah `occurred_on` non-string jadi teks sebelum dirangkai. Ini bukan
+pelonggaran gerbang: **nilai non-string tidak membuat apa pun tersimpan**, ia
+hanya membuat draft tetap bisa ditampilkan. Fail-closed tetap: akun yang tidak
+bisa dipastikan tetap `None` → draft menandai "(akun belum jelas)".
+
+#### Jejak asal tidak boleh hilang sesudah baris tersimpan (perbaikan review ronde 6, 9 Okt 2026)
+
+Dua pintu terakhir dari kelas yang sama, keduanya ditemukan lewat self-review
+ronde 6 dan keduanya **dijalankan**, bukan dibaca mata:
+
+1. **`render_draft()` melempar untuk hasil berbentuk salah.** `draft()` sudah
+   dijaga bentuknya, tapi fungsi yang menampilkan draft ke chat belum —
+   `render_draft(None)` / `render_draft("x")` / `render_draft({"ok": True,
+   "draft": "x"})` melempar `AttributeError`. Sekarang semuanya mengembalikan
+   **teks** ("Gagal mengurai: ...").
+2. **`waktu` di konfirmasi tidak dijaga tipenya, padahal masuk jejak asal.**
+   Pemanggil chat yang wajar mengirim `datetime`, bukan teks. `json.dumps`
+   melempar `TypeError: Object of type datetime is not JSON serializable`
+   **sesudah** `db.save_transactions` berhasil — akibatnya baris ledger
+   **TERTULIS** sementara jejak asalnya hilang dan pemanggil menerima stack
+   trace. Itu melanggar "asal setiap penyimpanan tercatat" di atas dan janji
+   docstring `simpan()`. Bukti (pengirim `deny`, salinan, baris 62→63):
+
+   ```
+   waktu = datetime(2026,10,12,15,30) -> LEMPAR TypeError  baris 62->63 TERTULIS  jejak hilang
+   waktu = object()                   -> LEMPAR TypeError  baris 63->64 TERTULIS  jejak hilang
+   ```
+
+   Sekarang jejak asal **dibangun dan dinormalkan sebelum** ledger tersentuh
+   (`_teks_aman()`: `datetime` → ISO, nilai lain → JSON/repr), jadi tidak ada
+   lagi langkah yang bisa gagal setelah baris masuk. Jejak selalu berisi teks
+   seragam. Gagal menulis berkas jejak (`OSError`) tidak lagi melempar:
+   `simpan()` mengembalikan `ok: True` dengan `jejak: null` dan
+   `jejak_error` — baris ledger sudah masuk, dan itu tidak boleh disembunyikan
+   sebagai "beres".
+
+Ditambah penjaga jalur parser: `draft()` dengan `parse_fn` yang **melempar**
+(bukan mengembalikan kode) kini menghasilkan kode `parser_melempar`, bukan
+exception ke pemanggil chat.
+
+Dan penjaga tipe di `_normalisasi_perintah()`: fungsi itu juga dipanggil
+langsung (bukan lewat `perintah_diizinkan()`), dan di situ `.lower()` dipanggil
+sebelum penjaga tipe apa pun — `_normalisasi_perintah(123)` melempar
+`AttributeError`. Sekarang non-teks → `""`, yang berarti "tidak ada perintah
+yang diakui", bukan exception.
+
+**Sapuan adversarial sebelum penyerahan** (bukan sesudah dikomplain): 432
+kalimat penolakan turunan → 0 bocor; 22 kontrol perintah sah → 0 salah ditolak;
+11 jalur dengan argumen berbentuk salah → 0 exception; AST → penulis ledger
+tetap hanya `['simpan']`. Sapuan itulah yang menemukan pintu
+`_normalisasi_perintah()` di atas.
+
 ### Asal setiap penyimpanan tercatat
 
 Setelah simpan berhasil, satu baris JSON ditulis ke
@@ -894,6 +965,13 @@ Setelah simpan berhasil, satu baris JSON ditulis ke
 Ditulis **setelah** `db.save_transactions` berhasil. Aman: penyimpanan itu satu
 transaksi database (semua-atau-tidak-sama-sekali), jadi tidak ada keadaan
 setengah jadi yang perlu dilacak lebih dulu.
+
+Sejak perbaikan ronde 6, isi jejak **dinormalkan sebelum** ledger tersentuh
+(`_teks_aman()`), supaya tidak ada langkah yang masih bisa gagal sesudah baris
+masuk. `waktu_konfirmasi` selalu berbentuk teks: `datetime` dikonversi ke ISO,
+nilai non-teks lain ke JSON/repr. Kalau berkas jejak sendiri gagal ditulis,
+`simpan()` tetap mengembalikan `ok: True` (baris ledger sudah masuk) dengan
+`jejak: null` + `jejak_error` — kegagalan itu tidak disembunyikan.
 
 ### Rin tidak punya jalur simpan — bukti, bukan desain
 
