@@ -349,9 +349,9 @@ def _ringkas_untuk_model(analisa):
 
 
 def _panggil_model(fakta):
-    key = os.environ.get("NINE_ROUTER_API_KEY", "").strip()
+    key = model_config.api_key()
     if not key:
-        raise RuntimeError("NINE_ROUTER_API_KEY tidak ada di environment")
+        raise RuntimeError("KENARI_API_KEY tidak ada di environment")
 
     body = {
         "model": MODEL,

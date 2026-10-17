@@ -16,7 +16,10 @@ import sys
 import urllib.request
 from datetime import date
 
-BASE = "http://localhost:20128/v1/chat/completions"
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+import model_config  # noqa: E402
+
+BASE = model_config._base_url()  # ponytail: env dibaca saat impor; upgrade ke panggil-per-request kalau skrip jadi long-running
 
 KATEGORI = ["Makan", "Transport", "Belanja", "Hiburan", "Tagihan",
             "Kesehatan", "Pendidikan", "Gaji", "Bonus", "Lainnya"]
@@ -62,7 +65,7 @@ TIDAK_TRANSAKSI = ["halo", "apa kabar", "makasih ya"]
 
 
 def panggil(model, teks):
-    key = os.environ.get("NINE_ROUTER_API_KEY", "").strip()
+    key = os.environ.get("KENARI_API_KEY", "").strip()
     body = {
         "model": model, "max_tokens": 900, "stream": True, "temperature": 0,
         "messages": [{"role": "system", "content": SYS},

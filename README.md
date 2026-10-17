@@ -71,8 +71,17 @@ Konfigurasinya ada di `src/model_config.py`. Bawaannya API kenari.id:
 Kalau ingin lewat router lokal (mis. omniroute), timpa alamatnya:
 
 ```bash
-export NINE_ROUTER_BASE="http://localhost:20128/v1/chat/completions"
+export KENARI_BASE="http://localhost:20128/v1/chat/completions"
+export KENARI_API_KEY="<kunci>"   # wajib kalau mau memakai AI
 ```
+
+`KENARI_BASE` **opsional** — bawaannya `https://kenari.id/v1/chat/completions`.
+Normalisasinya: nilai yang berakhir `/v1` atau `/v1/` otomatis ditambah
+`chat/completions`, jadi `export KENARI_BASE="https://kenari.id/v1"` juga benar.
+Nilai yang sudah berakhir `/chat/completions` dipakai apa adanya.
+
+`KENARI_API_KEY` tidak punya bawaan; tanpa isinya, kolom catat jatuh ke
+pengisian manual (aplikasi tetap jalan).
 
 Perlu diperhatikan: **nama model di kenari.id tidak memakai awalan `kenari/`.**
 Awalan itu konvensi router omniroute. Lewat kenari.id langsung, nama modelnya

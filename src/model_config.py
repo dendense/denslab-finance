@@ -36,6 +36,33 @@ MODEL = "deepseek-v4-1-flash"
 MODEL_CADANGAN = "agnes-2-0-flash:free"
 
 # Bawaan: kenari.id langsung. Tidak perlu omniroute.
-# Kalau ingin lewat router lokal, set NINE_ROUTER_BASE=http://localhost:20128/v1/chat/completions
-BASE = os.environ.get("NINE_ROUTER_BASE", "https://kenari.id/v1/chat/completions")
+# Kalau ingin lewat router lokal, set KENARI_BASE=http://localhost:20128/v1/chat/completions
+_BASE_BAWAAN = "https://kenari.id/v1/chat/completions"
+
+
+def _base_url():
+    """KENARI_BASE boleh menunjuk root API (`.../v1`) atau endpoint penuh.
+
+    Kode mem-POST langsung ke nilai ini, jadi `.../v1` saja = 404. Bentuk
+    yang diterima: kosong -> bawaan, berakhir `/chat/completions` -> apa
+    adanya, berakhir `/v1` -> ditambah `chat/completions`.
+    """
+    url = os.environ.get("KENARI_BASE", "").strip().rstrip("/")
+    if not url:
+        return _BASE_BAWAAN
+    if url.endswith("/chat/completions"):
+        return url
+    if url.endswith("/v1"):
+        return url + "/chat/completions"
+    return url  # ponytail: bentuk lain dipakai apa adanya; upgrade ke parser URL kalau ternyata salah bentuk
+
+
+BASE = _base_url()
+
+
+def api_key():
+    """Nama dibaca dari satu tempat, supaya tidak tersebar di empat berkas."""
+    return os.environ.get("KENARI_API_KEY", "").strip()
+
+
 TIMEOUT = 90

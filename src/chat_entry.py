@@ -62,12 +62,12 @@ def parse(text):
     stream WAJIB true. Alasannya: ROUTER membalas HTTP 200 dengan content
     KOSONG saat stream=false untuk model-model ini (bug yang sama dengan jalur
     visi). Default sekarang Kenari LANGSUNG (lihat `model_config.BASE`), tapi
-    NINE_ROUTER_BASE bisa menunjuk router lokal — dan router apa pun yang
+    KENARI_BASE bisa menunjuk router lokal — dan router apa pun yang
     dipakai tetap punya sifat ini. Jadi jangan set stream=false.
     """
-    key = os.environ.get("NINE_ROUTER_API_KEY", "").strip()
+    key = model_config.api_key()
     if not key:
-        raise RuntimeError("NINE_ROUTER_API_KEY tidak ada di environment")
+        raise RuntimeError("KENARI_API_KEY tidak ada di environment")
 
     body = {
         "model": MODEL,
