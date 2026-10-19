@@ -46,6 +46,25 @@ python3 src/server.py --port 8791
 Buka `http://localhost:8791`. Database dibuat otomatis saat server pertama kali
 jalan, lengkap dengan 11 kategori bawaan.
 
+### Backup otomatis
+
+`scripts/start-server.sh` membuat backup `finance.db` **sebelum** server start,
+lalu menyalakan server. Backup memakai `sqlite3 .backup` (bukan `cp`: menyalin
+berkas DB yang sedang hidup bisa menghasilkan salinan rusak), memeriksa
+`PRAGMA integrity_check` pada salinannya, dan membuang salinan yang tidak lolos.
+
+```bash
+bash scripts/start-server.sh            # backup + start (kalau belum jalan)
+bash scripts/start-server.sh --restart  # backup + restart
+bash scripts/backup-db.sh               # backup saja
+```
+
+Tujuan: `~/Documents/AI/finance-backups/finance-YYYYMMDD-HHMMSS.db` (di luar
+repo dan di luar folder data). Simpan 30 terakhir — ubah dengan
+`FINANCE_BACKUP_KEEP`. Kalau backup gagal, **server tetap dinyalakan** dan
+kegagalannya dicatat di log: aplikasi yang mati karena backup gagal lebih buruk
+daripada aplikasi yang jalan tanpa backup hari itu.
+
 **Akun sengaja kosong — kamu membuatnya sendiri.** Buka layar **Akun** dan
 tambahkan rekening yang kamu pakai (tabungan, dompet digital, uang tunai)
 beserta saldo awalnya. Setelah itu kamu bisa mulai mencatat.
