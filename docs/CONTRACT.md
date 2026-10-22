@@ -1026,7 +1026,7 @@ satu langkah yang dipegang manusia — bukan oleh gerbang ini sendiri.
 `chat_gate.py` tidak mengimpor modul jaringan apa pun, tidak membuka port, dan
 tidak menyentuh kunci API. Server tetap `127.0.0.1`. Modul ini membaca
 `finance.db` langsung sebagai proses di Mac yang sama — persis seperti yang
-diusulkan di surat `requests/monica-ke-steve-2026-10-09-akses-tulis-chat.md`.
+diusulkan di surat `docs/arsip/monica-ke-steve-2026-10-09-akses-tulis-chat.md`.
 
 ### Jalur CLI (untuk Deny di Mac yang sama)
 
