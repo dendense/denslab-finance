@@ -278,6 +278,11 @@ def draft(text, path=None, parse_fn=None):
         aid, anama = _cocokkan_akun(tx.get("account_hint"), akun)
         tid, tnama = _cocokkan_akun(tx.get("to_account_hint"), akun)
         butuh_akun = aid is None and len(akun) != 1
+        # Transfer butuh DUA akun: `src/schema.sql:68-74` mewajibkan
+        # `to_account_id` terisi untuk direction='transfer'. Kalau akun tujuan
+        # belum jelas, itu harus dikatakan di draft — bukan baru ketahuan saat
+        # simpan dengan pesan yang salah (bug 22 Okt 2026).
+        butuh_tujuan = tx.get("direction") == "transfer" and tid is None
         # `flow_type` non-string (mis. list) tidak boleh jadi kunci dict —
         # itu TypeError di jalur yang seharusnya mengembalikan kode.
         ftype = tx.get("flow_type")
@@ -289,6 +294,7 @@ def draft(text, path=None, parse_fn=None):
             "to_account_id": tid,
             "to_account_name": tnama,
             "butuh_akun": butuh_akun,
+            "butuh_akun_tujuan": butuh_tujuan,
             "sifat": sifat,
         })
 
@@ -297,6 +303,7 @@ def draft(text, path=None, parse_fn=None):
         "question": d.get("question"),
         "akun_kandidat": nama_akun,
         "perlu_akun": any(t["butuh_akun"] for t in untuk_tampil),
+        "perlu_akun_tujuan": any(t["butuh_akun_tujuan"] for t in untuk_tampil),
     }}
 
 
@@ -345,10 +352,21 @@ def render_draft(hasil):
         if tx.get("note"):
             baris.append("     catatan: %s" % tx["note"])
 
+    ada_transfer = any(isinstance(t, dict) and t.get("flow_type") == "transfer"
+                       for t in txs)
     ekor = []
     if d.get("perlu_akun"):
-        ekor.append("  Akun belum jelas. Pilih salah satu: %s"
+        # Untuk transfer, yang belum jelas adalah akun ASAL — bukan "akun"
+        # tanpa keterangan. Pesan lama menyebut "akun tidak disebutkan" padahal
+        # akun tujuan sudah disebut Deny (bug 22 Okt 2026).
+        ekor.append("  %s belum jelas. Pilih salah satu: %s"
+                    % ("Akun asal" if ada_transfer else "Akun",
+                       ", ".join(d.get("akun_kandidat") or [])))
+    if d.get("perlu_akun_tujuan"):
+        ekor.append("  Akun tujuan belum jelas. Pilih salah satu: %s"
                     % ", ".join(d.get("akun_kandidat") or []))
+    if ada_transfer and (d.get("perlu_akun") or d.get("perlu_akun_tujuan")):
+        ekor.append("  Tulis lengkap: 'pindah dana 100000 dari Mandiri ke Tabungan'.")
     ekor.append("  Belum ada yang tersimpan. Balas \"simpan\" untuk menyimpan.")
 
     return "\n".join(baris + [""] + ekor)

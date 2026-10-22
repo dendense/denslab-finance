@@ -34,7 +34,7 @@ Format:
   {"direction": "in"|"out"|"transfer", "amount": number,
    "category": string|null, "note": string,
    "occurred_on": "YYYY-MM-DD"|null, "account_hint": string|null,
-   "assumed_date": bool}
+   "to_account_hint": string|null, "assumed_date": bool}
 ], "question": string|null}
 
 Aturan WAJIB:
@@ -44,6 +44,10 @@ Aturan WAJIB:
   dan jangan pernah buang salah satunya.
 - amount SELALU positif. Arah disimpan di "direction", bukan di tanda angka.
 - "transfer"/"pindah"/"masukin ke tabungan" -> "transfer".
+- Untuk "transfer": "account_hint" = akun ASAL, "to_account_hint" = akun TUJUAN.
+  JANGAN menggabungkan dua akun dalam satu field ("Mandiri -> Tabungan" SALAH).
+  Kalau hanya tujuan yang disebut ("pindah dana 100000 ke Tabungan"), isi
+  "to_account_hint" dan biarkan "account_hint" null. Jangan mengarang akun asal.
 - "terima"/"gaji"/"masuk"/"dapat"/"bonus"/"dibayar" -> "in". Sisanya "out".
 - category HARUS salah satu dari: %s
   Category adalah JENIS transaksi, BUKAN arah. Untuk direction "transfer", category = null.

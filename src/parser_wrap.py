@@ -13,6 +13,7 @@ Yang dikerjakan file ini:
      ditampilkan UI — bukan exception yang menjatuhkan server
 """
 from datetime import date
+import re
 
 # Kata kunci untuk menebak sifat transaksi. Sengaja pendek dan konservatif:
 # lebih baik Deny mengoreksi satu tebakan daripada parser salah menandai
@@ -42,6 +43,76 @@ BUKAN_AKUN_SENDIRI = ("kenari", "siray", "openai", "anthropic", "cloud",
 KATEGORI_OUT = {"Makan", "Transport", "Belanja", "Hiburan", "Tagihan",
                 "Kesehatan", "Pendidikan", "Lainnya"}
 KATEGORI_IN = {"Gaji", "Bonus", "Lainnya"}
+
+# ── Akun asal/tujuan untuk transfer ─────────────────────────────────────────
+# KENAPA INI ADA (bug nyata, 22 Okt 2026): skema JSON di SYS prompt
+# `chat_entry.py` hanya punya `account_hint`, tidak punya `to_account_hint`.
+# Akibatnya model menaruh akun TUJUAN di kolom ASAL: "Pindah dana 100000 ke
+# Tabungan" jadi transfer DARI Tabungan ke (kosong), lalu simpan gagal dengan
+# pesan "akun tidak disebutkan" — padahal satu akun jelas disebut, dan yang
+# kurang adalah akun asal.
+#
+# Prompt sudah diperbaiki, TAPI keluaran model tidak bisa diandalkan (dan bisa
+# berganti model kapan saja). Jadi bentuk "dari X ke Y" dikenali ulang di sini
+# secara DETERMINISTIK dari kalimat aslinya.
+#
+# Nol tebak: yang diisi hanya nama yang benar-benar tertulis di kalimat, dan
+# pencocokannya ke akun aktif tetap dilakukan `chat_gate._cocokkan_akun()` /
+# `db._resolve_account()`. Kalau nama itu bukan akun, hasilnya "(belum jelas)",
+# bukan tebakan.
+_KATA_PEMISAH = {"ke", "dari", "dan", "lalu", "terus", "dengan", "buat", "untuk"}
+
+
+def _frasa_akun(teks, kata):
+    """Frasa 1-2 kata setelah 'dari'/'ke'. None kalau tidak ada.
+
+    Berhenti di kata pemisah ("ke", "dari", ...) dan di angka, supaya
+    "dari Mandiri ke Tabungan" tidak menghasilkan "Mandiri ke Tabungan".
+    """
+    m = re.search(r"\b%s\s+([A-Za-z][A-Za-z\- ]{0,30})" % kata, teks or "", re.I)
+    if not m:
+        return None
+    kata_kata = []
+    for w in m.group(1).split():
+        if w.lower() in _KATA_PEMISAH or any(c.isdigit() for c in w):
+            break
+        kata_kata.append(w)
+        if len(kata_kata) == 2:
+            break
+    return " ".join(kata_kata) or None
+
+
+def lengkapi_akun_transfer(tx, teks):
+    """Isi `account_hint` (asal) dan `to_account_hint` (tujuan) untuk transfer.
+
+    Aturan yang dipakai, semuanya bisa dibuktikan dari kalimat:
+      * "ke Y"   -> Y adalah TUJUAN (to_account_hint)
+      * "dari X" -> X adalah ASAL   (account_hint)
+      * hint dari model yang isinya SAMA dengan frasa tujuan bukan asal -> dibuang
+        (ini yang bikin "ke Tabungan" tercatat sebagai asal)
+      * hint yang menempelkan dua akun jadi satu ("Mandiri -> Tabungan") dibuang;
+        kalau kalimatnya memuat "dari"/"ke", nama diambil dari situ.
+    Tidak ada aturan "asal = akun utama": aplikasi ini tidak punya konsep itu.
+    """
+    if tx.get("direction") != "transfer":
+        return tx
+
+    dari = _frasa_akun(teks, "dari")
+    ke = _frasa_akun(teks, "ke")
+    asal = (tx.get("account_hint") or "").strip() if isinstance(
+        tx.get("account_hint"), str) else ""
+
+    if "->" in asal or "→" in asal or re.search(r"\bke\b", asal, re.I):
+        asal = ""
+    if ke and asal.lower() == ke.lower():
+        asal = ""
+    if dari:
+        asal = dari
+
+    tx["account_hint"] = asal or None
+    if ke:
+        tx["to_account_hint"] = ke
+    return tx
 
 
 def tebak_flow_type(tx):
@@ -168,6 +239,9 @@ def parse_kontrak(text):
         return {"ok": True, "draft": {"transactions": [], "question": pesan}}
 
     bersih = [bersihkan(tx) for tx in txs]
+    # Akun asal/tujuan transfer diambil ulang dari kalimat asli — keluaran model
+    # tidak bisa diandalkan untuk itu (lihat `lengkapi_akun_transfer`).
+    bersih = [lengkapi_akun_transfer(tx, text) for tx in bersih]
     # Buang transaksi tanpa jumlah: parser kadang mengeluarkan baris kosong
     # kalau kalimatnya ambigu. Menyimpan 0 akan merusak laporan diam-diam.
     bersih = [tx for tx in bersih if tx["amount"] > 0]

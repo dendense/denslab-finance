@@ -20,7 +20,7 @@ from pathlib import Path
 #   finance/          <- repo publik: KODE saja
 #     src/            <- berkas ini
 #     tests/          <- uji
-#   finance-pribadi/  <- DATA: di LUAR repo, tidak akan pernah masuk git
+#   Data/finance/     <- DATA: di LUAR repo, tidak akan pernah masuk git
 #
 # Kenapa data dipisah FISIK, bukan cuma di-.gitignore:
 # `.gitignore` hanya mencegah `git add .` menambahkan berkas. Dia tidak
@@ -42,7 +42,7 @@ REPO_DIR = ROOT_DIR
 
 # Folder data: dari env, atau default di samping repo.
 DATA_DIR = Path(os.environ.get("FINANCE_DATA")
-                or (REPO_DIR.parent / "finance-pribadi"))
+                or (REPO_DIR.parent / "Data" / "finance"))
 
 
 class _PathDB(str):
@@ -191,7 +191,7 @@ def periksa_lokasi_data(path=None):
             "Kalau folder ini memang tempat datamu, tandai dengan:\n"
             "    touch %s\n"
             "Kalau bukan, arahkan ke folder yang benar:\n"
-            "    export FINANCE_DATA=/path/ke/finance-pribadi" % (d, PENANDA, d / PENANDA)
+            "    export FINANCE_DATA=/path/ke/Data/finance" % (d, PENANDA, d / PENANDA)
         )
     return None
 
@@ -1208,12 +1208,14 @@ def save_transactions(items, path=DB_PATH):
                     "flow_type '%s' tidak cocok dengan direction '%s' (harusnya '%s')"
                     % (flow_type, direction, FLOW_DIRECTION[flow_type]))
 
-            account_id = _resolve_account(conn, it.get("account_id"),
-                                          it.get("account_hint"))
+            account_id = _resolve_account(
+                conn, it.get("account_id"), it.get("account_hint"),
+                peran="akun asal" if direction == "transfer" else "akun")
             to_account_id = None
             if direction == "transfer":
                 to_account_id = _resolve_account(conn, it.get("to_account_id"),
-                                                 it.get("to_account_hint"))
+                                                 it.get("to_account_hint"),
+                                                 peran="akun tujuan")
                 if to_account_id == account_id:
                     raise ValueError("transfer ke akun yang sama tidak masuk akal")
                 category_id = None
@@ -1233,8 +1235,15 @@ def save_transactions(items, path=DB_PATH):
     return ids
 
 
-def _resolve_account(conn, account_id, hint):
+def _resolve_account(conn, account_id, hint, peran="akun"):
     """Cari akun dari id atau dari tebakan nama.
+
+    `peran` hanya dipakai untuk PESAN GALAT: "akun", "akun asal", atau
+    "akun tujuan". Transfer butuh dua akun, dan pesan lama menyebut keduanya
+    dengan kalimat yang sama ("akun tidak disebutkan") — menyesatkan, karena
+    pengguna yang sudah menyebut akun tujuan diberi tahu seolah tidak menyebut
+    akun apa pun (bug nyata, 22 Okt 2026). Nilai bawaan "akun" menjaga
+    pemanggil lama tetap sama.
 
     TIDAK ada cadangan otomatis. Kalau akun tidak bisa ditentukan, ini GAGAL —
     tidak menebak.
@@ -1252,7 +1261,7 @@ def _resolve_account(conn, account_id, hint):
                            (account_id,)).fetchone()
         if row:
             return row["id"]
-        raise ValueError("akun id %s tidak ada atau tidak aktif" % account_id)
+        raise ValueError("%s id %s tidak ada atau tidak aktif" % (peran, account_id))
 
     if hint and hint.strip():
         bersih = hint.strip()
@@ -1267,8 +1276,8 @@ def _resolve_account(conn, account_id, hint):
         if row:
             return row["id"]
         raise ValueError(
-            "akun '%s' tidak ditemukan. Akun yang ada: %s"
-            % (bersih, _daftar_akun(conn)))
+            "%s '%s' tidak ditemukan. Akun yang ada: %s"
+            % (peran, bersih, _daftar_akun(conn)))
 
     # Tanpa petunjuk sama sekali: kalau hanya ada SATU akun aktif, itu jelas.
     # Kalau lebih dari satu, menebak berarti bisa salah — dan salahnya senyap.
@@ -1277,8 +1286,10 @@ def _resolve_account(conn, account_id, hint):
         return rows[0]["id"]
 
     raise ValueError(
-        "akun tidak disebutkan. Ada %d akun aktif (%s) — sebutkan salah satunya."
-        % (len(rows), ", ".join(r["name"] for r in rows)))
+        "%s tidak disebutkan. Ada %d akun aktif (%s) — sebutkan %s.%s"
+        % (peran, len(rows), ", ".join(r["name"] for r in rows), peran,
+           "" if peran == "akun" else
+           " Contoh lengkap: 'pindah dana 100000 dari Mandiri ke Tabungan'."))
 
 
 def _daftar_akun(conn):
@@ -1370,8 +1381,11 @@ def update_transaction(tx_id, changes, path=DB_PATH):
                 raise ValueError("nominal harus lebih besar dari nol")
 
         if "account_id" in changes or "account_hint" in changes:
-            account_id = _resolve_account(conn, changes.get("account_id"),
-                                          changes.get("account_hint"))
+            account_id = _resolve_account(
+                conn, changes.get("account_id"), changes.get("account_hint"),
+                peran="akun asal"
+                if (changes.get("flow_type") or row["flow_type"]) == "transfer"
+                else "akun")
 
         # flow_type menentukan direction — bukan sebaliknya.
         if "flow_type" in changes:
@@ -1385,7 +1399,8 @@ def update_transaction(tx_id, changes, path=DB_PATH):
         if flow_type == "transfer":
             if "to_account_id" in changes or "to_account_hint" in changes:
                 to_account_id = _resolve_account(conn, changes.get("to_account_id"),
-                                                 changes.get("to_account_hint"))
+                                                 changes.get("to_account_hint"),
+                                                 peran="akun tujuan")
             if not to_account_id:
                 raise ValueError(
                     "transfer butuh akun tujuan. Kirim 'to_account_id' atau "
@@ -1422,7 +1437,7 @@ def delete_transaction(tx_id, path=DB_PATH, log_path=None):
     """Hapus transaksi — KERAS, tapi barisnya dicatat dulu ke berkas pemulihan.
 
     Menghapus data keuangan tidak bisa dibatalkan. Sebelum barisnya dibuang,
-    seluruh isinya ditulis ke `finance-pribadi/terhapus.log` (JSON per baris)
+    seluruh isinya ditulis ke `Data/finance/terhapus.log` (JSON per baris)
     supaya masih bisa dipulihkan manual kalau ternyata salah hapus.
 
     Mengembalikan dict baris yang dihapus.
