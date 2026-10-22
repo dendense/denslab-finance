@@ -129,14 +129,14 @@ def api_transaction_patch(tx_id, body):
 
 def api_transaction_delete(tx_id):
     """Hapus transaksi. KERAS, tapi barisnya lebih dulu dicatat ke berkas
-    pemulihan `finance-pribadi/terhapus.log` — data keuangan tidak bisa dikembalikan,
+    pemulihan `Data/finance/terhapus.log` — data keuangan tidak bisa dikembalikan,
     jadi jejaknya harus ada sebelum barisnya dibuang."""
     try:
         hasil = db.delete_transaction(tx_id)
     except ValueError as e:
         return {"ok": False, "error": "transaksi_tidak_ada", "message": str(e)}
     return {"ok": True, "id": tx_id, "dihapus": True,
-            "pemulihan": "finance-pribadi/terhapus.log", "transaksi": hasil}
+            "pemulihan": "Data/finance/terhapus.log", "transaksi": hasil}
 
 
 def api_parse(body):
@@ -463,7 +463,7 @@ BARIS_CICILAN = re.compile(
     r"^\s*(\d+)\.\s+(\d+)\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*$")
 
 
-# ── status LUNAS: berkas TERPISAH finance-pribadi/HUTANG-LUNAS.json ──────────
+# ── status LUNAS: berkas TERPISAH Data/finance/HUTANG-LUNAS.json ──────────
 # Kenapa berkas terpisah: LIST-HUTANG.md adalah jadwal asli Deny dan TIDAK
 # boleh disentuh (nol tulis). Status lunas adalah LAPISAN di atasnya, jadi
 # disimpan di berkas sendiri. LIST-HUTANG.md tidak punya id utang, maka kunci
@@ -829,7 +829,7 @@ def _baca_hutang():
 
     return {
         "ok": True,
-        "sumber": "finance-pribadi/LIST-HUTANG.md",
+        "sumber": "Data/finance/LIST-HUTANG.md",
         "hari_ini": hari_ini_teks,
         "jumlah_utang": len(hasil),
         "total_semua": total_semua,

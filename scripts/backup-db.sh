@@ -7,9 +7,16 @@
 # Keluar: 0 = backup sah tersimpan · 1 = gagal (tidak ada berkas rusak tertinggal)
 set -uo pipefail
 
-DB="${FINANCE_DB:-${FINANCE_DATA:-$HOME/Documents/AI/finance-pribadi}/finance.db}"
-DEST="${FINANCE_BACKUP_DIR:-$HOME/Documents/AI/finance-backups}"
+DB="${FINANCE_DB:-${FINANCE_DATA:-$HOME/Documents/AI/Data/finance}/finance.db}"
+DEST="${FINANCE_BACKUP_DIR:-$HOME/Documents/AI/Backup/finance}"
 KEEP="${FINANCE_BACKUP_KEEP:-30}"
+
+# Kalau direktori tujuan tidak ada (Backup/ di external tidak terpasang),
+# JANGAN membuat folder liar di disk internal lalu menulis ke sana diam-diam.
+if [ ! -d "$DEST" ]; then
+  echo "BACKUP DIBATALKAN: $DEST tidak ada" >&2
+  exit 1
+fi
 
 [ -f "$DB" ] || { echo "backup: DB tidak ada: $DB" >&2; exit 1; }
 

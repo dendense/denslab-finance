@@ -204,7 +204,7 @@ try:
     import os
     data_dir = Path(os.environ.get("FINANCE_DATA")
                     or (Path(__file__).resolve().parent.parent.parent
-                        / "finance-pribadi"))
+                        / "Data" / "finance"))
     asli = data_dir / "finance.db"
     if not asli.exists():
         print("  LEWATI  database Deny tidak ada di %s" % asli)

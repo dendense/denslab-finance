@@ -105,7 +105,7 @@ rm -rf /tmp/uji && mkdir -p /tmp/uji/src /tmp/uji/web /tmp/uji/data-tes
 cd /tmp/uji
 cp -R ~/Documents/AI/finance/src/. src/
 cp -R ~/Documents/AI/finance/web/. web/
-cp "${FINANCE_DATA:-$HOME/Documents/AI/finance-pribadi}/finance.db" data-tes/finance.db
+cp "${FINANCE_DATA:-$HOME/Documents/AI/Data/finance}/finance.db" data-tes/finance.db
 
 # 2. Tandai folder data SEMENTARA (wajib — pengaman lokasi data akan menolak
 #    folder berisi database tanpa penanda; lihat "Pengaman lokasi data" di bawah)

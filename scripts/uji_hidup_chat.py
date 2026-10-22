@@ -7,7 +7,7 @@ salinan supaya kelihatan kapan penulisan terjadi (dan kapan TIDAK).
 
 Sengaja memakai kuota model sedikit: dua kalimat saja.
 
-Jalankan:  . finance-pribadi/env.sh && python3 scripts/uji_hidup_chat.py
+Jalankan:  . Data/finance/env.sh && python3 scripts/uji_hidup_chat.py
 """
 import shutil
 import sys
@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import chat_gate  # noqa: E402
 import db         # noqa: E402
 
-DB_DENY = ROOT.parent / "finance-pribadi" / "finance.db"
+DB_DENY = ROOT.parent / "Data" / "finance" / "finance.db"
 
 TMPDIR = Path(tempfile.mkdtemp())
 SALINAN = TMPDIR / "finance.db"

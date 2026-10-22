@@ -117,7 +117,7 @@ terbuka, tapi skema harus ditambah `user_id` + RLS lagi.
 | `src/db.py` | lapisan akses data — **semua angka lewat sini** |
 | `tests/test_db.py` | 24 uji; jalankan `python3 tests/test_db.py` setelah mengubah skema |
 | `src/chat_entry.py` | parser bahasa Indonesia → draft transaksi |
-| `finance-pribadi/finance.db` | database kerja (dibuat, masih kosong) |
+| `Data/finance/finance.db` | database kerja (dibuat, masih kosong) |
 
 ## Aturan yang tidak bisa dilanggar
 

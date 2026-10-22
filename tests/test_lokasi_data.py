@@ -95,7 +95,7 @@ except RuntimeError as e:
     cek_benar("tidak melempar", False)
 
 print("\n8. `init_db` menandai folder baru otomatis")
-baru = TMP / "baru" / "finance-pribadi"
+baru = TMP / "baru" / "finance"
 db.init_db(baru / "finance.db")
 cek_benar("penanda terbuat", (baru / db.PENANDA).exists())
 cek_benar("database terbuat", (baru / "finance.db").exists())
@@ -119,7 +119,7 @@ except RuntimeError as e:
 print("\n10. Folder data Deny dikenali sebagai SAH")
 # Pemeriksaan paling penting: pengaman tidak boleh menghentikan Deny sendiri.
 nyata = Path(os.environ.get("FINANCE_DATA")
-             or (Path(__file__).resolve().parent.parent.parent / "finance-pribadi"))
+             or (Path(__file__).resolve().parent.parent.parent / "Data" / "finance"))
 if nyata.exists():
     cek("periksa_lokasi_data(folder Deny)", db.periksa_lokasi_data(nyata), None)
     cek_benar("penanda ada", (nyata / db.PENANDA).exists())

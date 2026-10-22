@@ -12,7 +12,7 @@
 set -u
 
 FIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FIN_DATA="${FINANCE_DATA:-$FIN_DIR/../finance-pribadi}"
+FIN_DATA="${FINANCE_DATA:-$FIN_DIR/../Data/finance}"
 FIN_ENV="$FIN_DATA/env.sh"
 FIN_PORT="${FIN_PORT:-8791}"
 LOG="${FINANCE_LOG:-$HOME/.hermes/cache/scratch/finance-8791.log}"

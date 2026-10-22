@@ -59,8 +59,11 @@ bash scripts/start-server.sh --restart  # backup + restart
 bash scripts/backup-db.sh               # backup saja
 ```
 
-Tujuan: `~/Documents/AI/finance-backups/finance-YYYYMMDD-HHMMSS.db` (di luar
-repo dan di luar folder data). Simpan 30 terakhir — ubah dengan
+Tujuan: `~/Documents/AI/Backup/finance/finance-YYYYMMDD-HHMMSS.db` (di luar
+repo dan di luar folder data). Kalau `Backup/finance/` tidak ada — mis. `Backup/`
+dipindah ke disk external dan external tidak terpasang — skrip **membatalkan
+backup** (`exit 1`) alih-alih membuat folder liar di disk internal. Simpan 30
+terakhir — ubah dengan
 `FINANCE_BACKUP_KEEP`. Kalau backup gagal, **server tetap dinyalakan** dan
 kegagalannya dicatat di log: aplikasi yang mati karena backup gagal lebih buruk
 daripada aplikasi yang jalan tanpa backup hari itu.
@@ -120,12 +123,12 @@ sudah dicabut. Model yang "hidup" belum tentu bisa menebak dengan benar.
 
 ### Di mana datanya disimpan
 
-Secara bawaan **di luar folder repo**, di `../finance-pribadi/`:
+Secara bawaan **di luar folder repo**, di `../Data/finance/`:
 
 ```
 folder-induk/
 ├── finance/            ← hasil git clone (kode)
-└── finance-pribadi/    ← database, kredensial, rekening koran (DATAMU)
+└── Data/finance/       ← database, kredensial, rekening koran (DATAMU)
 ```
 
 Pemisahan ini disengaja. Kalau datamu ada di dalam repo, satu salah ketik

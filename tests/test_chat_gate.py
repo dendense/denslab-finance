@@ -10,7 +10,7 @@ Bukti yang diminta kartu (t_0c4c4678):
   (+) Rin tidak punya jalur simpan — dibuktikan, bukan didesain
 
 TIDAK MENYENTUH DATABASE DENY. Uji ini:
-  1. mencatat jumlah baris `finance-pribadi/finance.db` SEBELUM,
+  1. mencatat jumlah baris `Data/finance/finance.db` SEBELUM,
   2. menyalinnya ke folder sementara,
   3. mengarahkan `db.DB_PATH` ke salinan itu (terima kasih `_PathDB`),
   4. bekerja sepenuhnya di salinan,
@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import chat_gate    # noqa: E402
 import db           # noqa: E402
 
-DB_DENY = ROOT.parent / "finance-pribadi" / "finance.db"
+DB_DENY = ROOT.parent / "Data" / "finance" / "finance.db"
 
 gagal = []
 

@@ -6,7 +6,7 @@ model sungguhan (kuota Deny terpakai, jadi kalimatnya sedikit dan sengaja).
 
 Berjalan di SALINAN database, bukan `finance.db` Deny.
 
-Jalankan:  . finance-pribadi/env.sh && python3 scripts/contoh_draft_chat.py
+Jalankan:  . Data/finance/env.sh && python3 scripts/contoh_draft_chat.py
 """
 import shutil
 import sys
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import chat_gate  # noqa: E402
 import db         # noqa: E402
 
-DB_DENY = ROOT.parent / "finance-pribadi" / "finance.db"
+DB_DENY = ROOT.parent / "Data" / "finance" / "finance.db"
 
 KALIMAT = [
     "beli makan malam 32000",

@@ -6,7 +6,7 @@ APA YANG DILINDUNGI:
   keuangan lewat panel. Layar terkunci = tidak ada angka yang tampil.
 
 APA YANG TIDAK DILINDUNGI (penting, dan sengaja ditulis di sini):
-  - `finance-pribadi/finance.db` tetap terbaca langsung dengan SQLite oleh siapa pun yang
+  - `Data/finance/finance.db` tetap terbaca langsung dengan SQLite oleh siapa pun yang
     punya akses ke Mac ini. Password di sini TIDAK menyentuh database.
   - Berkas berkas proyek ini juga terbaca lewat Finder.
   - Siapa pun yang bisa membuka terminal bisa mereset password (lihat
@@ -43,7 +43,7 @@ ROOT_DIR = SRC_DIR.parent
 # hash password masuk satu commit, menghapusnya tidak cukup — git menyimpan
 # riwayat. Pemisahan fisik mencegahnya, .gitignore hanya mengingatkan.
 DATA_DIR = Path(os.environ.get("FINANCE_DATA")
-                or (ROOT_DIR.parent / "finance-pribadi"))
+                or (ROOT_DIR.parent / "Data" / "finance"))
 KREDENSIAL = DATA_DIR / "kredensial.json"
 
 # Sesi hidup di memori saja. Restart server = semua sesi hilang.

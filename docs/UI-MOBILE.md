@@ -106,11 +106,11 @@ git add src.css tailwind.css      # keduanya, selalu berpasangan
 ### Uji yang menyentuh database WAJIB pakai `FINANCE_DATA`
 
 Tanpa itu, uji **menulis ke database keuangan Deny**. Data hidup di luar repo
-(`../finance-pribadi/`), dan `src/db.py` punya pengaman: folder yang berisi
+(`../Data/finance/`), dan `src/db.py` punya pengaman: folder yang berisi
 `finance.db` tapi tanpa penanda `.finance-data` akan **ditolak** server.
 
 ```bash
-cp "${FINANCE_DATA:-$HOME/Documents/AI/finance-pribadi}/finance.db" /tmp/uji/data/finance.db
+cp "${FINANCE_DATA:-$HOME/Documents/AI/Data/finance}/finance.db" /tmp/uji/data/finance.db
 touch /tmp/uji/data/.finance-data
 FINANCE_DATA=/tmp/uji/data python3 src/server.py --port 8795
 ```

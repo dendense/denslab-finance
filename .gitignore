@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA PRIBADI
 #
-# Sejak 3 Okt 2026 data hidup DI LUAR repo (`../finance-pribadi/`), jadi
+# Sejak 3 Okt 2026 data hidup DI LUAR repo (`../Data/finance/`), jadi
 # daftar di bawah ini bukan pengaman utama — pemisahan fisiknya yang mengamankan.
 # Daftar ini tetap ada sebagai jaring kedua: kalau seseorang menaruh data
 # kembali ke dalam repo, `git add .` tidak akan menyentuhnya.
@@ -17,7 +17,7 @@
 
 # Database keuangan — isi seluruh aplikasi
 data/
-finance-pribadi/
+Data/
 *.db
 *.db-journal
 *.sqlite

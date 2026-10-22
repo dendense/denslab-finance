@@ -418,7 +418,7 @@ tulis password apa pun di surat**, walau cuma password uji.
 
 ### Aturan repo publik (surat monica 3 Okt)
 
-- Data keuangan hidup **di luar repo** (`../finance-pribadi/`). Jangan pernah
+- Data keuangan hidup **di luar repo** (`../Data/finance/`). Jangan pernah
   menulis ke `finance/data/` — folder itu tidak ada lagi.
 - **`web/tailwind.css` WAJIB ikut git** walaupun hasil build. `web/.gitignore`
   sempat mengabaikannya — akibatnya orang yang meng-clone dapat panel **tanpa

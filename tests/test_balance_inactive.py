@@ -11,7 +11,7 @@ TIDAK BUTUH SERVER, TIDAK BUTUH PASSWORD, TIDAK MENYENTUH DATA DENY.
 
 Cara kerjanya: `api_summary` dipanggil LANGSUNG dari proses ini, dengan
 db.DB_PATH diarahkan ke database sementara. Tidak ada HTTP, tidak ada sesi
-login, dan tidak satu byte pun ditulis ke finance-pribadi/.
+login, dan tidak satu byte pun ditulis ke Data/finance/.
 
 Mengapa tidak lewat HTTP seperti versi sebelumnya — uji versi lama menuntut
 server yang jalan, dan server itu membaca database Deny:
@@ -78,7 +78,7 @@ def cek(nama, dapat, harap):
 # `db.DB_PATH` adalah default argumen `path=DB_PATH` di 30 fungsi db, dan
 # `server.api_summary` memanggil lewat default itu. Sejak `_PathDB` dipasang,
 # penimpaan di sini benar-benar berlaku. Langkah 1 di bawah membuktikannya.
-DB_DENY = str(ROOT.parent / "finance-pribadi" / "finance.db")
+DB_DENY = str(ROOT.parent / "Data" / "finance" / "finance.db")
 db.DB_PATH = TMP
 db.init_db(TMP)
 
