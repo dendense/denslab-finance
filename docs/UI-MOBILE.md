@@ -86,9 +86,9 @@ Tidak ada Supabase — arsitekturnya dibatalkan 1 Okt 2026. Yang berlaku sekaran
 (`src/auth.py`, `src/server.py:1148-1153`):
 
 - **Password lokal.** Hash PBKDF2-SHA256 (200.000 iterasi) di `kredensial.json` di folder data
-  (`src/auth.py:45-46`), bukan di repo. Dipasang lewat `web/login.html` atau
+  (`src/auth.py:45,47`), bukan di repo. Dipasang lewat `web/login.html` atau
   `scripts/reset_password.py`.
-- **Sesi di memori proses** (`src/auth.py:48-49` → `_SESI = {}`). Token acak 32 byte, batas diam
+- **Sesi di memori proses** (`src/auth.py:50` → `_SESI = {}`). Token acak 32 byte, batas diam
   12 jam. **Restart server = semua sesi hilang.** Ini disengaja, bukan bug — jangan menjanjikan
   "sesi bertahan" tanpa mengubah backend.
 - **Cookie `sesi`**: `Path=/; HttpOnly; SameSite=Lax`, **tanpa** `Max-Age` dan **tanpa** `Secure`

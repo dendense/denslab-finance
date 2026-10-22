@@ -15,8 +15,8 @@ yang benar dan dokumen ini yang harus diperbaiki.
 |---|---|
 | Mesin | SQLite, satu berkas |
 | Lokasi DB | `$FINANCE_DATA/finance.db`, default `~/Documents/AI/Data/finance/finance.db` (`src/db.py:44-45`) |
-| DDL | `src/schema.sql` (262 baris) dibaca `init_db()` — `src/db.py:249` |
-| Data awal | `src/seed.sql` dibaca `init_db()` — `src/db.py:250`, dijalankan **setiap** server nyala dengan `INSERT OR IGNORE` |
+| DDL | `src/schema.sql` (262 baris) dibaca `init_db()` — `src/db.py:250` |
+| Data awal | `src/seed.sql` dibaca `init_db()` — `src/db.py:251`, dijalankan **setiap** server nyala dengan `INSERT OR IGNORE` |
 | Auth | password lokal + sesi di memori (`src/auth.py`) — **bukan** Supabase Auth |
 | RLS / `user_id` | **tidak ada.** Satu mesin, satu pengguna. `grep -c user_id src/schema.sql` → 1, dan itu baris komentar |
 | Tipe uang | `INTEGER` rupiah penuh, tanpa sen. `grep -c numeric src/schema.sql` → 0 |
@@ -59,7 +59,7 @@ kembali tiap restart pernah jadi bug nyata. Tambah akun lewat `POST /api/account
 | `sort_order` | INTEGER NOT NULL DEFAULT 0 | |
 | — | UNIQUE (`name`,`direction`) | "Lainnya" ada dua: satu `in`, satu `out` |
 
-11 kategori bawaan di `src/seed.sql:19-31` (8 `out`, 3 `in`).
+11 kategori bawaan di `src/seed.sql:19-30` (8 `out`, 3 `in`).
 
 ### `transactions` — satu baris = satu kejadian uang (`schema.sql:52-86`)
 

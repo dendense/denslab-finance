@@ -119,7 +119,7 @@ terbuka, tapi skema harus ditambah `user_id` + RLS lagi.
 | Berkas | Isi |
 |---|---|
 | `src/schema.sql` | 5 tabel + **4 view** (`v_account_balances`, `v_monthly_flow`, `v_net_worth`, `v_savings_progress`) — `schema.sql:141,170,217,239` |
-| `src/seed.sql` | **0 akun** (sengaja kosong, `seed.sql:33-39`) + 11 kategori bawaan (`seed.sql:19-31`) |
+| `src/seed.sql` | **0 akun** (sengaja kosong, `seed.sql:33-39`) + 11 kategori bawaan (`seed.sql:19-30`) |
 | `src/db.py` | lapisan akses data — **semua angka lewat sini** |
 | `src/server.py` | HTTP server + API + penyaji `web/` statis (1320 baris) |
 | `src/auth.py` | password + sesi memori (195 baris) |
