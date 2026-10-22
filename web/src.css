@@ -191,6 +191,17 @@
            dark:border-gray-500 dark:text-gray-200;
   }
   .chip-flow { @apply px-3 text-sm; }
+  /* Chip yang tidak boleh dipilih (mis. akun tujuan = akun asal). Tanpa ini
+     `disabled` tidak mengubah apa pun di layar: chip-nya tetap terlihat sama
+     dan tetap berkursor pointer, jadi Deny tidak tahu kenapa tidak bereaksi.
+     0.55 terukur: mode terang 2.96:1, mode gelap 5.12:1. Di bawah 4.5:1 untuk
+     teks 15px di mode terang — DIMAAFKAN karena kontrol nonaktif dikecualikan
+     WCAG 1.4.3, dan ALASANNYA tidak hanya dibawa oleh warna: kalimat
+     "Akun asal tidak bisa dipilih sebagai akun tujuan." tampil di atas chip
+     (kontras 4.84:1 terang / 6.82:1 gelap). Jangan turunkan opacity lebih
+     jauh tanpa memindahkan alasan itu ke teks yang lebih kuat. */
+  .chip:disabled { opacity: 0.55; cursor: not-allowed; }
+  .chip:disabled:active { scale: 1; }
 
   /* ── Lencana sifat transaksi ───────────────────────────────────────── */
   .lencana {

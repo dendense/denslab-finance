@@ -534,7 +534,7 @@ function renderHero(s) {
 function renderStats(s) {
   const f = s.flow;
   $('stat-in').textContent = rupiah(f.total_in);
-  $('stat-expense').textContent = rupiah(f.expense_real);
+  $('stat-expense').textContent = rupiah(f.total_out);
 
   /* pengeluaran: sebutkan apa yang BUKAN konsumsi, supaya tidak menyesatkan */
   const others = [];
@@ -544,7 +544,7 @@ function renderStats(s) {
     ? s.tx_count + ' transaksi tercatat'
     : 'belum ada transaksi';
   $('stat-expense-sub').textContent = others.length
-    ? 'konsumsi saja. Di luar ini: ' + others.join(' · ')
+    ? 'sudah termasuk talangan & bayar utang: ' + others.join(' · ')
     : 'konsumsi saja.';
 
   /* selisih — pakai net_real (perubahan kekayaan sebenarnya) */
@@ -911,7 +911,7 @@ function drawChart(series) {
   const rows = series.slice().reverse().map((p) => {
     const lbl = MONTH_SHORT[Number(p.month.split('-')[1]) - 1] + ' ' + p.month.slice(0, 4);
     if (p.state === 'ada') {
-      return lbl + ': masuk ' + rupiah(p.total_in) + ', keluar ' + rupiah(p.expense_real)
+      return lbl + ': masuk ' + rupiah(p.total_in) + ', konsumsi ' + rupiah(p.expense_real)
         + ', ' + (Number(p.tx_count) || 0) + ' transaksi';
     }
     if (p.state === 'error') return lbl + ': gagal dibaca';
@@ -951,12 +951,12 @@ function drawChart(series) {
   };
 
   legend.appendChild(item('var(--color-income)', 'pemasukan'));
-  legend.appendChild(item('var(--color-expense)', 'pengeluaran sungguhan'));
+  legend.appendChild(item('var(--color-expense)', 'konsumsi'));
   legend.appendChild(item(null, 'bulan belum dicatat', true));
   /* Keterangan garis rata-rata HANYA kalau garisnya benar-benar digambar.
      Kalau tidak, legenda akan menjelaskan sesuatu yang tidak ada di grafik. */
   if (rata !== null) {
-    legend.appendChild(itemGaris('rata-rata pengeluaran ' + known.length + ' bulan'));
+    legend.appendChild(itemGaris('rata-rata konsumsi ' + known.length + ' bulan'));
   }
   /* Satuan untuk angka kecil di bawah label bulan — dijelaskan SEKALI di
      sini, bukan diulang di setiap kolom (di 360px tidak muat). */
@@ -1023,7 +1023,7 @@ async function renderKategori() {
       + (bulan ? '?month=' + encodeURIComponent(bulan) + '&direction=out' : '?direction=out'));
   } catch (e) {
     note.textContent = 'Rincian kategori tidak bisa dibaca dari server. '
-      + 'Ini BUKAN berarti pengeluaranmu kosong.';
+      + 'Ini BUKAN berarti konsumsimu kosong.';
     const kotak = el('div', 'rounded-xl border border-dashed border-gray-300 px-4 py-5 '
       + 'text-center dark:border-gray-700');
     kotak.appendChild(el('p', 'm-0 mb-1 text-base font-semibold',
@@ -1041,13 +1041,13 @@ async function renderKategori() {
 
   /* ── Keadaan kosong: kalimat yang menjelaskan, bukan batang nol ──────── */
   if (!semua.length) {
-    note.textContent = 'Tidak ada pengeluaran tercatat di ' + namaBulan + '. '
+    note.textContent = 'Tidak ada konsumsi tercatat di ' + namaBulan + '. '
       + 'Tidak digambar sebagai batang nol — nol dan "tidak ada data" dua hal '
       + 'berbeda.';
     const kotak = el('div', 'rounded-xl border border-dashed border-gray-300 px-4 py-5 '
       + 'text-center dark:border-gray-700');
     kotak.appendChild(el('p', 'm-0 mb-1 text-base font-semibold',
-      'Belum ada pengeluaran di ' + namaBulan));
+      'Belum ada konsumsi di ' + namaBulan));
     kotak.appendChild(el('p', 'm-0 text-sm text-gray-500 dark:text-gray-400',
       'Yang dihitung di sini hanya transaksi bersifat "Pengeluaran". Talangan '
       + 'dan pelunasan utang sengaja tidak ikut — keduanya bukan konsumsi.'));
@@ -1486,6 +1486,12 @@ function formEditTransaksi(li, t) {
   pesan.hidden = true;
   pesan.setAttribute('role', 'alert');
 
+  /* Alasan tombol Simpan mati saat sifat = Pindah akun. Teks di layar, bukan
+     hanya `title` — lihat syncSifat(). */
+  const alasanTransfer = el('p', 'teks-peringatan');
+  alasanTransfer.hidden = true;
+  alasanTransfer.setAttribute('role', 'status');
+
   const barisTombol = el('div', 'flex gap-2');
   const simpan = el('button', 'tombol tombol-utama flex-1', 'Simpan perubahan');
   simpan.type = 'button';
@@ -1514,14 +1520,20 @@ function formEditTransaksi(li, t) {
   function syncSifat() {
     gambarKategori();
     syncTombol();
-    /* transfer butuh akun tujuan, dan itu belum ada di layar ini — katakan
-       apa adanya alih-alih mengirim data setengah jadi. */
+    /* transfer butuh akun tujuan, dan layar ini tidak punya pemilihnya —
+       katakan apa adanya alih-alih mengirim data setengah jadi. Pemilih
+       tujuan ada di layar Catat (kartu draft), jadi arahkan ke sana.
+       Pesannya TAMPIL di layar, bukan hanya di `title`: title tidak muncul
+       di layar sentuh, dan tombol mati tanpa alasan terbaca seperti bug. */
     if (flowPilih === 'transfer') {
       simpan.disabled = true;
-      simpan.title = 'Pindah akun butuh akun tujuan, dan itu belum ada di layar ini. '
-        + 'Batalkan dan catat ulang lewat layar Catat.';
+      simpan.title = 'Pindah akun butuh akun tujuan, dan layar Ubah tidak punya '
+        + 'pemilihnya. Batalkan, lalu catat ulang lewat layar Catat.';
+      alasanTransfer.textContent = simpan.title;
+      alasanTransfer.hidden = false;
     } else {
       simpan.title = '';
+      alasanTransfer.hidden = true;
       syncTombol();
     }
   }
@@ -1596,7 +1608,7 @@ function formEditTransaksi(li, t) {
   });
 
   [judul, asal, lNom, iNom, lTgl, iTgl, lSifat, rowSifat, lKat, rowKat,
-   lAkun, rowAkun, lCat, iCat, pesan, barisTombol].forEach((n) => li.appendChild(n));
+   lAkun, rowAkun, lCat, iCat, alasanTransfer, pesan, barisTombol].forEach((n) => li.appendChild(n));
   barisTombol.appendChild(simpan);
   barisTombol.appendChild(batal);
 
@@ -2556,9 +2568,42 @@ function flowChips(current, onChange) {
   return row;
 }
 
+/* Alasan pertama yang menghalangi simpan, atau null.
+   Transfer tanpa akun tujuan PASTI ditolak server ("akun tujuan tidak
+   disebutkan"), dan tujuan yang sama dengan asal juga ("transfer ke akun yang
+   sama tidak masuk akal"). Lebih jujur menonaktifkan tombolnya di sini
+   daripada membiarkan Deny menekan Simpan lalu menunggu galat. */
+function alasanTolakSimpan(items) {
+  for (const it of items) {
+    if (it.flow_type !== 'transfer') continue;
+    if (!it.to_account_hint) {
+      return 'Pindah akun butuh akun tujuan — pilih di kartu draft sebelum menyimpan.';
+    }
+    if (it.to_account_hint === it.account_hint) {
+      return 'Akun tujuan tidak boleh sama dengan akun asal.';
+    }
+  }
+  return null;
+}
+
 /* Kartu draft untuk satu transaksi hasil /api/parse.
-   mengembalikan { node, get } — get() mengembalikan payload siap /api/save. */
-function draftCard(d, index, total) {
+   mengembalikan { node, get } — get() mengembalikan payload siap /api/save.
+   `onChange` dipanggil setiap kali pilihan di kartu berubah, supaya pemanggil
+   bisa menghitung ulang keadaan tombol Simpan. */
+function draftCard(d, index, total, onChange) {
+  /* Nama akun TUJUAN dari parser, dicocokkan ke akun aktif seperti akun asal.
+     `account_hint` = akun ASAL, `to_account_hint` = akun TUJUAN (CONTRACT.md).
+     Kalau tidak ada yang cocok, tebakan parser DIPERTAHANKAN apa adanya:
+     server yang menolak dengan pesan berperan ("akun tujuan 'X' tidak
+     ditemukan"), dan pesan itu ditampilkan tanpa diterjemahkan di klien. */
+  const hintTujuan = (() => {
+    const h = String(d.to_account_hint || '').trim().toLowerCase();
+    if (!h) return null;
+    const hit = state.accounts.find((a) => a.is_active && a.name.toLowerCase() === h)
+      || state.accounts.find((a) => a.is_active && a.name.toLowerCase().includes(h));
+    return hit ? hit.name : d.to_account_hint;
+  })();
+
   const item = {
     occurred_on: d.occurred_on || todayISO(),
     direction: d.direction || 'out',
@@ -2567,7 +2612,7 @@ function draftCard(d, index, total) {
     note: d.note || '',
     category: d.category || null,
     account_hint: resolveHint(d.account_hint),
-    to_account_hint: d.to_account_hint || null,
+    to_account_hint: hintTujuan,
     assumed_date: !!d.assumed_date,
   };
 
@@ -2584,7 +2629,7 @@ function draftCard(d, index, total) {
   body.appendChild(el('p', 'angka-draft', rupiah(item.amount)));
   if (item.note) body.appendChild(el('p', 'mb-3 text-sm text-gray-500 dark:text-gray-400 break-words', item.note));
 
-  /* sifat transaksi — chip koreksi (bagian D handoff) */
+  /* Sifat transaksi — chip koreksi (bagian D handoff) */
   const fflow = el('div', 'draft-bidang');
   fflow.appendChild(el('label', null, 'Sifat transaksi'));
   const chipRow = flowChips(item.flow_type, (ft) => {
@@ -2592,11 +2637,13 @@ function draftCard(d, index, total) {
     item.direction = FLOW_TO_DIRECTION[ft];
     /* transfer tidak punya kategori di db.py */
     fflow.querySelector('.flowwarn').hidden = (ft !== 'transfer');
+    /* chip akun tujuan hanya relevan untuk transfer */
+    ftujuan.hidden = (ft !== 'transfer');
+    if (onChange) onChange();
   });
   fflow.appendChild(chipRow);
   const warn = el('p', 'teks-peringatan flowwarn',
-    'Pindah akun: kategori tidak dipakai, dan butuh akun tujuan. '
-    + 'Server akan menolak kalau akun tujuan belum ada.');
+    'Pindah akun: kategori tidak dipakai, dan akun tujuan wajib dipilih.');
   warn.hidden = item.flow_type !== 'transfer';
   fflow.appendChild(warn);
   body.appendChild(fflow);
@@ -2616,6 +2663,9 @@ function draftCard(d, index, total) {
         String(c === b)));
       const lbl = wrap.querySelector('.draft-acc');
       if (lbl) lbl.textContent = 'akun ' + a.name;
+      /* akun tujuan tidak boleh sama dengan asal — daftarnya digambar ulang */
+      gambarTujuan();
+      if (onChange) onChange();
     });
     arow.appendChild(b);
   });
@@ -2632,6 +2682,65 @@ function draftCard(d, index, total) {
       + ' — periksa dulu, karena simpan gagal kalau akunnya keliru.'));
   }
   body.appendChild(facc);
+
+  /* Akun TUJUAN — hanya untuk transfer. Daftarnya akun aktif yang sama
+     dengan chip asal, dan akun yang sedang jadi asal DINONAKTIFKAN: server
+     menolak "transfer ke akun yang sama tidak masuk akal", jadi pilihannya
+     tidak ditawarkan sejak awal. Yang dikirim tetap NAMA (to_account_hint),
+     bukan id — server yang mencocokkan, klien tidak menebak. */
+  const ftujuan = el('div', 'draft-bidang');
+  ftujuan.appendChild(el('label', null, 'Akun tujuan'));
+  const trow = el('div', 'flex flex-wrap gap-2');
+  const tcatatan = el('p', 'teks-peringatan');
+  tcatatan.hidden = true;
+  /* Alasan chip-asal dinonaktifkan ditulis di layar, bukan hanya di `title`:
+     `title` tidak muncul di layar sentuh dan tidak dibacakan andal, jadi
+     tanpa baris ini Deny hanya melihat chip yang tidak bereaksi. */
+  const tasal = el('p', 'm-0 basis-full text-xs leading-snug text-gray-500 dark:text-gray-400',
+    'Akun asal tidak bisa dipilih sebagai akun tujuan.');
+  tasal.hidden = true;
+
+  function gambarTujuan() {
+    trow.textContent = '';
+    const aktif = state.accounts.filter((a) => a.is_active);
+    if (!aktif.length) {
+      trow.appendChild(el('span', 'text-xs text-gray-500 dark:text-gray-400',
+        'Daftar akun tidak bisa dimuat.'));
+      return;
+    }
+    aktif.forEach((a) => {
+      const b = el('button', 'chip', a.name);
+      b.type = 'button';
+      b.disabled = (a.name === item.account_hint);
+      if (b.disabled) b.title = 'Sudah dipakai sebagai akun asal.';
+      b.setAttribute('aria-pressed', String(a.name === item.to_account_hint));
+      b.addEventListener('click', () => {
+        item.to_account_hint = a.name;
+        Array.from(trow.children).forEach((c) => c.setAttribute('aria-pressed',
+          String(c === b)));
+        tcatatan.hidden = true;
+        if (onChange) onChange();
+      });
+      trow.appendChild(b);
+    });
+    /* Tujuan dari parser yang tidak ada di daftar: jangan dihapus diam-diam.
+       Katakan apa adanya dan biarkan server menolak dengan pesan berperannya
+       ("akun tujuan 'X' tidak ditemukan") — itu yang ditampilkan ke Deny. */
+    if (item.to_account_hint
+        && !aktif.some((a) => a.name === item.to_account_hint)) {
+      tcatatan.textContent = 'Akun tujuan dari parser: "' + item.to_account_hint
+        + '" — tidak ada di daftar akun aktif. Pilih salah satu di atas, atau '
+        + 'simpan dan biarkan server menolaknya dengan pesan aslinya.';
+      tcatatan.hidden = false;
+    }
+    tasal.hidden = !aktif.some((a) => a.name === item.account_hint);
+  }
+  gambarTujuan();
+  ftujuan.appendChild(trow);
+  ftujuan.appendChild(tasal);
+  ftujuan.appendChild(tcatatan);
+  ftujuan.hidden = item.flow_type !== 'transfer';
+  body.appendChild(ftujuan);
 
   /* kategori sebagai chip */
   const fcat = el('div', 'draft-bidang');
@@ -2711,7 +2820,7 @@ function renderDraft(draft) {
   box.appendChild(head);
 
   /* kalau lebih dari satu: daftar yang dicek satu-satu, bukan digabung */
-  const cards = list.map((d, i) => draftCard(d, i, list.length));
+  const cards = list.map((d, i) => draftCard(d, i, list.length, syncSimpan));
   cards.forEach((c) => box.appendChild(c.node));
 
   const foot = el('div', 'draft-item');
@@ -2720,6 +2829,21 @@ function renderDraft(draft) {
   const save = el('button', 'tombol tombol-utama', list.length > 1
     ? 'Simpan ' + list.length + ' transaksi' : 'Simpan');
   save.type = 'button';
+
+  /* Tombol Simpan mengikuti keadaan kartu, bukan cuma jumlah kartu: transfer
+     tanpa tujuan (atau tujuan = asal) akan ditolak server, jadi tombolnya
+     dimatikan dan alasannya ditulis di bawah — bukan dibiarkan ditekan lalu
+     gagal. Dipanggil ulang oleh tiap chip lewat `onChange`. */
+  function syncSimpan() {
+    const alasan = alasanTolakSimpan(cards.map((c) => c.get()));
+    save.disabled = !!alasan;
+    save.title = alasan || '';
+    alasanSimpan.textContent = alasan || '';
+    alasanSimpan.hidden = !alasan;
+  }
+  const alasanSimpan = el('p', 'teks-peringatan');
+  alasanSimpan.hidden = true;
+  alasanSimpan.setAttribute('role', 'status');
   const drop = el('button', 'tombol tombol-hantu', 'Batal');
   drop.type = 'button';
   drop.addEventListener('click', () => {
@@ -2739,7 +2863,13 @@ function renderDraft(draft) {
       if (it.note) o.note = it.note;
       if (it.category) o.category = it.category;
       if (it.account_hint) o.account_hint = it.account_hint;
-      if (it.to_account_hint) o.to_account_hint = it.to_account_hint;
+      /* Akun tujuan HANYA untuk transfer. Kalau draft transfer diubah jadi
+         Pengeluaran, pilihan tujuan lama masih tersimpan di kartu — mengirimnya
+         membuat server menolak ("flow_type 'expense' tidak boleh punya akun
+         tujuan") padahal Deny tidak menyentuh apa pun soal tujuan. */
+      if (it.flow_type === 'transfer' && it.to_account_hint) {
+        o.to_account_hint = it.to_account_hint;
+      }
       return o;
     });
 
@@ -2775,8 +2905,10 @@ function renderDraft(draft) {
   row.appendChild(save);
   row.appendChild(drop);
   foot.appendChild(row);
+  foot.appendChild(alasanSimpan);
   box.appendChild(foot);
 
+  syncSimpan();
   $('chatlog').appendChild(box);
   scrollChat();
 }
@@ -2789,7 +2921,6 @@ function openManual() {
   const box = el('div', 'draft');
   const head = el('div', 'draft-kepala');
   head.appendChild(el('span', null, 'Isi manual'));
-  head.appendChild(el('span', 'draft-acc', 'akun ' + (item.account_hint || 'tidak pasti')));
   box.appendChild(head);
 
   const body = el('div', 'draft-item');
@@ -2798,6 +2929,11 @@ function openManual() {
     amount: null, note: '', category: null,
     account_hint: defaultAccountName(),
   };
+  /* Label akun ditulis SETELAH `item` ada. Sebelumnya baris ini di atas
+     deklarasi `item`, jadi membuka "Isi manual" melempar ReferenceError
+     ("Cannot access 'item' before initialization") dan kartunya tidak pernah
+     tampil — jalur cadangan saat provider AI mati, mati juga. */
+  head.appendChild(el('span', 'draft-acc', 'akun ' + (item.account_hint || 'tidak pasti')));
 
   /* akun: chip, bukan dropdown */
   const facc = el('div', 'draft-bidang');
@@ -2901,6 +3037,9 @@ function openManual() {
   const save = el('button', 'tombol tombol-utama', 'Simpan');
   save.type = 'button';
   save.disabled = true;
+  const alasanManual = el('p', 'teks-peringatan');
+  alasanManual.hidden = true;
+  alasanManual.setAttribute('role', 'status');
   const cancel = el('button', 'tombol tombol-hantu', 'Batal');
   cancel.type = 'button';
   cancel.addEventListener('click', () => box.remove());
@@ -2932,14 +3071,18 @@ function openManual() {
   row.appendChild(save);
   row.appendChild(cancel);
   foot.appendChild(row);
+  foot.appendChild(alasanManual);
   box.appendChild(foot);
 
   function sync() {
     if (item.flow_type === 'transfer') {
       save.disabled = true;
-      save.title = 'Pindah akun butuh akun tujuan — belum tersedia di layar ini.';
+      save.title = 'Pindah akun butuh akun tujuan — isi lewat layar Catat (kartu draft).';
+      alasanManual.textContent = save.title;
+      alasanManual.hidden = false;
     } else {
       save.title = '';
+      alasanManual.hidden = true;
       save.disabled = !(item.amount > 0);
     }
   }
