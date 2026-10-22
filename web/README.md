@@ -18,7 +18,7 @@
 > tersentuh sama sekali, jadi tidak ada yang perlu dihapus. Dipakai untuk seluruh
 > uji Simpan/Edit/Hapus — lihat "Cara menguji alur tulis" di bawah.
 
-Dibangun mengikuti `docs/UI-MOBILE.md`, `docs/CONTRACT.md`, dan `HANDOFF-YUKI.md`.
+Dibangun mengikuti `docs/UI-MOBILE.md`, `docs/CONTRACT.md`, dan `docs/arsip/HANDOFF-YUKI.md`.
 
 | Berkas | Isi |
 |---|---|

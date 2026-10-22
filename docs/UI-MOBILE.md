@@ -115,7 +115,7 @@ Jangan menyimpan token di `localStorage`; cookie-nya sudah `HttpOnly`.
 
 **[KOREKSI]** Dulu bagian ini mengaku dipindah dari surat
 `monica-ke-yuki-2026-10-03-aturan-repo-publik.md`. **Surat itu tidak ada** di
-`docs/arsip-requests/` (isinya tiga berkas lain). Aturan di bawah tetap berlaku dan sekarang
+`docs/arsip/` (isinya surat lain). Aturan di bawah tetap berlaku dan sekarang
 tinggal di sini sebagai tempat asalnya — tidak ada dokumen lain yang perlu dirujuk.
 
 **Repo ini publik** — aturan ini berlaku untuk siapa pun yang mengubah `web/`.
