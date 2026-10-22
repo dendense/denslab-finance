@@ -78,6 +78,13 @@ Query param: `?month=2026-10` (opsional, default bulan berjalan).
 - **`expense_real` vs `total_out`** — jangan tertukar. `total_out` semua uang yang
   keluar; `expense_real` yang benar-benar konsumsi. Di Oktober bedanya 8x lipat.
   **Kartu "Pengeluaran" di UI harus pakai `expense_real`.**
+
+  **Pembaruan (kartu t_6df434cb):** kartu "Pengeluaran" di **beranda** kini memakai
+  `total_out` (all-in: konsumsi + talangan + pelunasan utang), karena Deny ingin satu angka
+  yang menjumlahkan semua uang keluar. `expense_real` tetap dipakai sebagai **"konsumsi"** oleh
+  grafik tren 6 bulan, kartu "Konsumsi per kategori", dan analisa bulanan. Jangan tertukar:
+  angka di kartu beranda ≠ angka di grafik. Kalau menambah konsumen baru untuk `expense_real`,
+  labelnya harus menyebut "konsumsi", bukan "pengeluaran".
 - **`net_real` vs `net`** — `net` selisih arus kas apa adanya, `net_real` perubahan
   kekayaan sebenarnya. Untuk panel analisa pakai `net_real`.
 - Semua angka **integer rupiah penuh**, tanpa titik atau koma. Format `Rp 1.100.000`
@@ -432,6 +439,23 @@ jatuh ke akun mana pun.
 { "ok": false, "error": "gagal_simpan",
   "message": "akun tidak disebutkan. Ada 3 akun aktif (BRI, Mandiri, Tabungan) — sebutkan salah satunya." }
 ```
+
+**Transfer (22 Okt 2026):** transfer butuh **dua** akun (`account_hint` = asal,
+`to_account_hint` = tujuan — lihat `src/schema.sql:68-74`), jadi pesannya menyebut
+**peran** yang kurang. Pesan lama menyebut "akun tidak disebutkan" walaupun Deny
+sudah menyebut akun tujuan — itu menyesatkan dan sudah diperbaiki.
+
+```json
+{ "ok": false, "error": "gagal_simpan",
+  "message": "akun asal tidak disebutkan. Ada 3 akun aktif (BRI, Mandiri, Tabungan) — sebutkan akun asal. Contoh lengkap: 'pindah dana 100000 dari Mandiri ke Tabungan'." }
+{ "ok": false, "error": "gagal_simpan",
+  "message": "akun tujuan 'BCA' tidak ditemukan. Akun yang ada: BRI, Mandiri, Tabungan" }
+```
+
+Bentuk "ke Y" dikenali sebagai tujuan dan "dari X" sebagai asal
+(`parser_wrap.lengkapi_akun_transfer`, deterministik dari kalimat asli). Akun asal
+**tidak pernah ditebak**: aplikasi ini tidak punya konsep "akun utama", dan menebak
+akun asal membuat saldo dua akun salah tanpa ada yang tahu.
 
 Pengecualian: kalau hanya ada **satu** akun aktif, transaksi tanpa petunjuk
 disimpan ke akun itu (tidak ada ambiguitas).
