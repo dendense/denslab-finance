@@ -263,8 +263,10 @@ diperbaiki monica; sekarang balasannya JSON rapi.
 
 ## Catatan proyek
 
-**Proyek ini bukan repo git** — tidak ada `.git`, jadi tidak ada riwayat versi.
-Berkas yang dihapus hilang permanen. Backup manual di `web/backup/` sudah
-dibuang (6 berkas era Pico & Tailwind awal) setelah dipastikan isinya
-tergantikan: hanya 2 id yang tidak ada di versi aktif, sementara 17 id baru
-sudah masuk.
+**[KOREKSI 23 Okt 2026]** Kalimat lama di sini berbunyi "**Proyek ini bukan repo git** — tidak ada
+`.git`, jadi tidak ada riwayat versi". Itu **salah**: `web/` adalah bagian dari repo git aktif
+(`~/Documents/AI/finance`, remote `dendense/monica-finance`, branch `main`, `.git/` di akar repo).
+Riwayat versi **ada**, dan berkas yang dihapus masih bisa dipulihkan lewat `git log` / `git show`.
+Karena itu tidak perlu lagi backup manual di `web/backup/` — cukup commit. (Folder `web/backup/`
+pernah ada, 6 berkas era Pico & Tailwind awal, dan sudah dibuang setelah dipastikan isinya
+tergantikan: hanya 2 id yang tidak ada di versi aktif, sementara 17 id baru sudah masuk.)

@@ -77,7 +77,11 @@ Query param: `?month=2026-10` (opsional, default bulan berjalan).
   adalah dua hal berbeda; menampilkan nol membuat Deny mengira pengeluarannya nol.
 - **`expense_real` vs `total_out`** — jangan tertukar. `total_out` semua uang yang
   keluar; `expense_real` yang benar-benar konsumsi. Di Oktober bedanya 8x lipat.
-  **Kartu "Pengeluaran" di UI harus pakai `expense_real`.**
+
+  ~~**Kartu "Pengeluaran" di UI harus pakai `expense_real`.**~~ — **USANG, jangan diikuti.**
+  Kalimat ini benar sebelum kartu `t_6df434cb` dan sekarang salah untuk beranda. Aturan yang
+  berlaku ada di paragraf berikut; kalau butuh satu kalimat saja: **beranda pakai `total_out`,
+  grafik/kategori/analisa pakai `expense_real` dan labelnya "konsumsi"**.
 
   **Pembaruan (kartu t_6df434cb):** kartu "Pengeluaran" di **beranda** kini memakai
   `total_out` (all-in: konsumsi + talangan + pelunasan utang), karena Deny ingin satu angka

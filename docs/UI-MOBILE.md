@@ -3,10 +3,18 @@
 Untuk **yuki**. Ini acuan desain; kalau ada yang bertentangan dengan kenyamanan pakai di HP,
 kenyamanan di HP yang menang.
 
+> **Koreksi 23 Okt 2026.** Empat bagian di dokumen ini sudah tidak benar dan dikoreksi di tempat,
+> ditandai **[KOREKSI]**: §Auth (Supabase), §Mode gelap (sudah diputuskan & diimplementasi),
+> rujukan surat yang tidak ada, dan §Laporan (bukan lagi "file dari monica").
+> Catatan struktur: aplikasi kini **lokal** (SQLite + server di Mac, lihat `docs/PLAN.md`
+> §Revisi), jadi panel dibuka dari Mac/lebar desktop juga. Prinsip mobile-first di bawah tetap
+> berlaku sebagai disiplin desain — layar tersempit tetap harus enak dipakai — tapi bukan lagi
+> karena Deny membukanya dari HP di jalan.
+
 ## Prinsip
 
-**Dirancang dari layar HP, bukan desktop yang dikecilkan.** Deny memakai ini terutama dari
-handphone, kemungkinan sambil berdiri di kasir atau di jalan. Asumsinya:
+**Dirancang dari layar HP, bukan desktop yang dikecilkan.** Layar tersempit (360 px) adalah
+batas yang menentukan; kalau muat di sana, lebar lain aman. Asumsinya:
 
 - **Satu tangan.** Aksi utama harus terjangkau ibu jari — separuh bawah layar, bukan pojok atas.
 - **Sekali lihat.** Informasi terpenting terbaca tanpa scroll.
@@ -27,6 +35,10 @@ handphone, kemungkinan sambil berdiri di kasir atau di jalan. Asumsinya:
 Urutan dari atas: **total kekayaan** (angka besar, ini yang pertama dicari) → pemasukan dan
 pengeluaran bulan berjalan → selisih → grafik tren 6 bulan → kartu saran hemat → daftar
 transaksi terakhir.
+
+Kartu "Pengeluaran" di beranda memakai `total_out` (semua uang keluar). Grafik tren dan
+konsumsi per kategori memakai `expense_real` dengan label **"konsumsi"** — dua angka berbeda
+dengan sengaja, lihat `docs/CONTRACT.md` §2 dan `web/app.js:537`.
 
 Grafik harus bisa dibaca di lebar 360 px. Kalau label tidak muat, ringkas jadi "Jul", jangan
 putar teks atau perkecil sampai tidak terbaca.
@@ -52,8 +64,11 @@ Kartu per akun dengan saldo. Total di atas. Tabungan dan investasi boleh dipisah
 dari akun harian, tapi tetap masuk total kekayaan.
 
 ### 5. Laporan
-Mingguan dan bulanan, dibaca dari file yang dihasilkan monica. Teks, bukan dashboard —
-Deny membacanya seperti laporan, bukan mengoperasikannya.
+**[KOREKSI]** Dulu ditulis "dibaca dari file yang dihasilkan monica". Sekarang halaman analisa
+punya endpoint sendiri: `GET /api/analysis` dan `POST /api/analysis` (`src/server.py:1164,1209`),
+angkanya dihitung dari SQL dan narasinya dari model (`src/monthly_analysis.py`, 393 baris).
+Teks, bukan dashboard — Deny membacanya seperti laporan, bukan mengoperasikannya. Bulan berjalan
+tidak bisa dianalisa; analisa dibuat untuk bulan yang sudah selesai.
 
 ## Yang harus dihindari
 
@@ -66,24 +81,44 @@ Deny membacanya seperti laporan, bukan mengoperasikannya.
 
 ## Auth
 
-Login Supabase. **Sesi harus bertahan** — Deny tidak boleh login ulang tiap kali membuka.
-Token disimpan di penyimpanan aman browser; jangan di `localStorage` polos kalau
-memungkinkan cookie httpOnly.
+**[KOREKSI]** Dulu bagian ini menyebut "Login Supabase" dan token di penyimpanan aman browser.
+Tidak ada Supabase — arsitekturnya dibatalkan 1 Okt 2026. Yang berlaku sekarang
+(`src/auth.py`, `src/server.py:1148-1153`):
+
+- **Password lokal.** Hash PBKDF2-SHA256 (200.000 iterasi) di `kredensial.json` di folder data
+  (`src/auth.py:45-46`), bukan di repo. Dipasang lewat `web/login.html` atau
+  `scripts/reset_password.py`.
+- **Sesi di memori proses** (`src/auth.py:48-49` → `_SESI = {}`). Token acak 32 byte, batas diam
+  12 jam. **Restart server = semua sesi hilang.** Ini disengaja, bukan bug — jangan menjanjikan
+  "sesi bertahan" tanpa mengubah backend.
+- **Cookie `sesi`**: `Path=/; HttpOnly; SameSite=Lax`, **tanpa** `Max-Age` dan **tanpa** `Secure`
+  (`src/server.py:42`). Jadi ini cookie sesi browser: hilang saat browser ditutup.
+- Halaman tanpa sesi diarahkan ke `/login` (302). Halaman `/login` sendiri disajikan 200.
+
+Kalau nanti sesi harus bertahan antar-restart, itu perubahan backend — bukan pekerjaan UI.
+Jangan menyimpan token di `localStorage`; cookie-nya sudah `HttpOnly`.
 
 ## Yang belum diputuskan
 
-- Mode gelap: Deny belum memutuskan. Pakai CSS variable sejak awal supaya nanti tidak
-  perlu refactor; jangan implementasi temanya dulu.
-- Offline: belum dikerjakan. Kalau nanti Deny sering mencatat tanpa sinyal, ini perlu
-  dibahas serius — bukan sekadar "tambah service worker".
+- **[KOREKSI] Mode gelap: SUDAH diputuskan dan SUDAH diimplementasi.** Tiga pilihan —
+  **Ikut sistem / Terang / Gelap** — lewat tombol `#btn-tema` (`web/index.html:98`), logika di
+  `web/app.js:3891-3905` (`TEMA = ['sistem','terang','gelap']`), class `.gelap` di `<html>`, dan
+  varian Tailwind `@custom-variant dark (&:where(.gelap, .gelap *))` (`web/src.css:19`).
+  **Aturan untuk perubahan baru:** jangan pakai `prefers-color-scheme` langsung — semua warna
+  gelap harus lewat varian `dark:` / class `.gelap` supaya pilihan manual tetap menang.
+- Offline: belum dikerjakan. Server-nya lokal, jadi "offline" berarti server mati — bukan
+  jaringan seluler hilang.
 
 ---
 
 ## Aturan berkas frontend (4 Okt 2026)
 
-Dipindah dari surat `monica-ke-yuki-2026-10-03-aturan-repo-publik.md` supaya
-tidak hilang saat suratnya diarsipkan. **Repo ini publik** — aturan ini berlaku
-untuk siapa pun yang mengubah `web/`.
+**[KOREKSI]** Dulu bagian ini mengaku dipindah dari surat
+`monica-ke-yuki-2026-10-03-aturan-repo-publik.md`. **Surat itu tidak ada** di
+`docs/arsip-requests/` (isinya tiga berkas lain). Aturan di bawah tetap berlaku dan sekarang
+tinggal di sini sebagai tempat asalnya — tidak ada dokumen lain yang perlu dirujuk.
+
+**Repo ini publik** — aturan ini berlaku untuk siapa pun yang mengubah `web/`.
 
 ### `web/tailwind.css` WAJIB ikut git, walaupun hasil build
 

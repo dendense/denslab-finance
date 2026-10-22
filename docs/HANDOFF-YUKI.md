@@ -1,7 +1,12 @@
 # Handoff ke yuki — panel web finance
 
-Dari **monica**, 1 Okt 2026. Semua yang tertulis di sini sudah diuji terhadap
-database nyata — bukan rencana.
+Dari **monica**, 1 Okt 2026. Surat ini sudah **selesai dijalankan** dan disimpan sebagai arsip.
+
+> **Koreksi 23 Okt 2026 (sebelum diarsipkan).** Lima pernyataan di surat ini sudah tidak benar
+> dan dikoreksi di tempat, ditandai **[KOREKSI]**. Alasannya: surat yang dibaca sebagai dokumen
+> aktif membuat pembaca mengira `web/` masih kosong dan aturan angkanya masih yang lama.
+> Acuan yang berlaku sekarang: `docs/CONTRACT.md` (endpoint), `docs/UI-MOBILE.md` (UI),
+> `docs/SCHEMA.md` (skema), `src/schema.sql` (sumber kebenaran DDL).
 
 ---
 
@@ -9,12 +14,12 @@ database nyata — bukan rencana.
 
 | Bagian | Status |
 |---|---|
-| Database SQLite + 3 view analisa | ✅ jalan |
-| Data nyata: 15 transaksi BRI Okt 2026 | ✅ terekonsiliasi ke rupiah |
-| Server API (`src/server.py`, port 8791) | ✅ **sedang jalan** |
-| Parser chat → draft terstruktur | ✅ 14/15 akurasi |
+| Database SQLite + **4** view analisa | ✅ jalan — **[KOREKSI]** dulu ditulis 3 view; sekarang `v_account_balances`, `v_monthly_flow`, `v_net_worth`, `v_savings_progress` (`src/schema.sql:141,170,217,239`) |
+| Data nyata: transaksi BRI Okt 2026 | ✅ terekonsiliasi ke rupiah |
+| Server API (`src/server.py`, port 8791) | ✅ jalan |
+| Parser chat → draft terstruktur | ✅ 14/15 akurasi (`src/parser_wrap.py`, 255 baris) |
 
-**Server sudah hidup.** Kamu bisa langsung `curl` untuk melihat bentuk datanya.
+**Server hidup.** Kamu bisa langsung `curl` untuk melihat bentuk datanya.
 
 ```
 GET  http://localhost:8791/api/summary?month=2026-10
@@ -23,13 +28,17 @@ POST http://localhost:8791/api/parse   {"text":"makan malam 45000"}
 POST http://localhost:8791/api/save    {"transactions":[...]}
 ```
 
-Folder kerjamu: **`~/Documents/AI/finance/web/`** — masih kosong.
-`src/server.py` menyajikan `web/index.html` di `http://localhost:8791/`.
+Folder kerjamu: **`~/Documents/AI/finance/web/`** — **[KOREKSI]** dulu ditulis "masih kosong";
+sekarang berisi 9 berkas tracked (`app.js` 4.643 baris, `index.html`, `login.html`, `src.css`,
+`tailwind.css` hasil build, `package.json`, `package-lock.json`, `README.md`, `.gitignore`).
+`src/server.py:29` (`STATIC = ROOT_DIR / "web"`) menyajikan folder itu di
+`http://localhost:8791/`. Halaman yang butuh sesi diarahkan ke `/login`.
 
 ## Bacaan wajib sebelum mulai
 
-**`~/Documents/AI/finance/CONTRACT.md`** — bentuk setiap endpoint, field demi field,
-sudah diverifikasi. Jangan mengarang field; kalau butuh tambahan, bilang ke monica.
+**`docs/CONTRACT.md`** — **[KOREKSI]** dulu ditulis `~/Documents/AI/finance/CONTRACT.md`;
+berkasnya ada di `docs/CONTRACT.md`. Bentuk setiap endpoint, field demi field, sudah
+diverifikasi. Jangan mengarang field; kalau butuh tambahan, bilang ke monica.
 
 ## Data nyata yang akan kamu lihat
 
@@ -47,11 +56,21 @@ tx_count        : 15
 
 ## Tiga jebakan yang paling mudah salah
 
-### 1. Kartu "Pengeluaran" pakai `flow.expense_real`, BUKAN `flow.total_out`
+### 1. Kartu "Pengeluaran" — bedakan beranda dan grafik
 
-Oktober ini bedanya **8x lipat**: Rp 284.000 vs Rp 2.100.000. Kalau pakai
-`total_out`, panel akan bilang Deny menghabiskan Rp 2,25 juta padahal sebagian
-besar itu pelunasan utang dan talangan project.
+**[KOREKSI]** Dulu surat ini bilang: kartu "Pengeluaran" pakai `flow.expense_real`, **BUKAN**
+`flow.total_out`. Itu sudah tidak berlaku untuk **beranda**. Aturan yang benar sekarang
+(`docs/CONTRACT.md` §2, kode `web/app.js:537`):
+
+| Tempat | Field | Label |
+|---|---|---|
+| Kartu "Pengeluaran" di **beranda** | `total_out` | "Pengeluaran" (all-in: konsumsi + talangan + pelunasan utang) |
+| Grafik tren 6 bulan · konsumsi per kategori · analisa bulanan | `expense_real` | **"Konsumsi"**, bukan "pengeluaran" |
+
+Oktober ini bedanya ~7-8x lipat: Rp 284.000 vs Rp 2.100.000. Kalau `expense_real` dipakai di
+beranda, panel menyembunyikan uang yang benar-benar keluar; kalau `total_out` dipakai di grafik
+tanpa label "konsumsi", panel menyebut pelunasan utang sebagai gaya hidup. Dua-duanya salah.
+Angka di kartu beranda **≠** angka di grafik — itu memang disengaja.
 
 ### 2. Warna dan label per `flow_type`
 
@@ -124,8 +143,13 @@ Nilai yang sah: `expense` · `income` · `receivable` · `debt_payment` · `tran
 
 - Pelacakan pelunasan piutang (piutang tercatat keluar, belum bisa ditandai lunas)
 - Saldo utang berjalan
-- Target tabungan, budget per kategori, ekspor PDF (gelombang 2)
+- Budget per kategori, ekspor PDF
 - Offline / service worker
+
+**[KOREKSI]** Dulu surat ini menyebut "target tabungan" sebagai belum ada. Sekarang **sudah
+ada**: tabel `savings_goals` (`src/schema.sql:119`), view `v_savings_progress`
+(`src/schema.sql:239`), rute `GET/POST/DELETE /api/savings` (`src/server.py:1165,1211,1252`),
+dan uji `tests/test_savings.py` (194 baris). Progres dihitung dari saldo akun, tidak disimpan.
 
 Kalau butuh salah satu ini, koordinasi dengan monica dulu.
 
