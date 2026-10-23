@@ -207,7 +207,7 @@
     </form>
 
     <p class="petunjuk" id="petunjuk">
-      Sesi hilang kalau servernya dimatikan — Deny perlu masuk lagi setelah itu.
+      Sesi bertahan walau app ditutup — berakhir saat laptop di-restart atau setelah 30 hari.
     </p>
   </div>
 </main>
@@ -263,11 +263,12 @@
      tetap izinkan mencoba login biasa (jangan memblokir Deny karena satu
      request gagal). */
   async function muatStatus() {
-    /* Sesi bisa mati saat panel sedang dipakai (server restart, atau diam
-       12 jam). app.js menulis penanda di sessionStorage sebelum mengalihkan
-       ke sini. Ditampilkan SEKALI saja — monica khawatir pesan permanen akan
-       terbaca seperti kerusakan; yang ini muncul cuma kalau memang baru
-       terlempar keluar, dan langsung dihapus setelah dibaca. */
+    /* Sesi bisa berakhir saat panel sedang dipakai (laptop di-restart, atau
+       lewat 30 hari — aturan 23 Okt 2026). app.js menulis penanda di
+       sessionStorage sebelum mengalihkan ke sini. Ditampilkan SEKALI saja —
+       monica khawatir pesan permanen akan terbaca seperti kerusakan; yang ini
+       muncul cuma kalau memang baru terlempar keluar, dan langsung dihapus
+       setelah dibaca. */
     var sebab = null;
     try {
       sebab = sessionStorage.getItem('sesi_mati');
