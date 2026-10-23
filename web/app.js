@@ -393,8 +393,10 @@ function setBusy(btn, busy) {
  * justru keadaan paling sulit ditelusuri. Lewat pembungkus ini, pemanggil
  * baru otomatis ikut terlindungi tanpa perlu tahu apa-apa.
  *
- * Kenapa penting, bukan sekadar rapi: sesi hidup di memori server. Restart
- * server (atau diam 12 jam) mematikan sesi saat Deny sedang memakai panel.
+ * Kenapa penting, bukan sekadar rapi: sesi disimpan di disk dan bertahan
+ * melewati restart server. Yang mematikannya cuma laptop di-restart, atau
+ * lewat 30 hari (aturan 23 Okt 2026) — dan itu bisa terjadi saat Deny sedang
+ * memakai panel.
  * Tanpa penanganan ini dia melihat panel dengan angka lama, mengira datanya
  * masih hidup, lalu setiap kali menekan Simpan gagal.
  */
