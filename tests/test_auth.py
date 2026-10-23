@@ -3,7 +3,11 @@
 
 Yang diuji BUKAN "passwordnya benar" saja, tapi:
   1. Tanpa login, tidak ada satu pun endpoint yang membocorkan data
-  2. Sesi mati saat server restart (permintaan Deny: kunci kalau server putus)
+  2. Sesi BERTAHAN melewati restart server, tapi MATI saat laptop restart
+     (D8, 23 Okt 2026 — membalik aturan lama "sesi mati saat server restart".
+      Alasan: app Tauri menutup sidecar tiap kali app ditutup, jadi sesi di
+      memori memaksa login ulang tiap buka app. Batasnya sekarang BOOT mesin,
+      diikat ke kern.bootsessionuuid. Uji perilakunya ada di §8.)
   3. Logout benar-benar mencabut token — token lama tidak bisa dipakai lagi
   4. Password tidak pernah tersimpan sebagai teks polos
   5. Reset lewat terminal bekerja (jalur pemulihan yang dipilih Deny)
@@ -17,7 +21,17 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+# Sejak 23 Okt 2026 sesi disimpan di DB, bukan di memori. Folder data uji WAJIB
+# di-set SEBELUM `db`/`auth` diimpor — keduanya membaca FINANCE_DATA saat dimuat.
+# Tanpa ini uji ini menulis baris `sesi` ke Data/finance/finance.db milik Deny.
+DATA_UJI = Path(tempfile.mkdtemp(prefix="uji-auth-"))
+os.environ["FINANCE_DATA"] = str(DATA_UJI)
+
+import db    # noqa: E402
 import auth  # noqa: E402
+
+db.init_db()   # tabel `sesi` harus ada sebelum ada yang membuat sesi
 
 gagal = []
 
@@ -80,15 +94,26 @@ import time
 time.sleep(0.01)
 cek("sesi berumur 0 detik sudah mati", auth.sesi_sah(t2), False)
 
-print("\n8. Sesi hidup di MEMORI saja — restart server = semua sesi hilang")
+print("\n8. Sesi BERTAHAN melewati restart server (D8, 23 Okt 2026)")
 t3 = auth.buat_sesi()
 n_sebelum = auth.jumlah_sesi()
 cek("ada sesi", n_sebelum > 0, True)
-# Tiru restart: proses baru = modul di-load ulang = _SESI kosong
+# Tiru restart server: proses baru = modul di-load ulang. Sesi disimpan di DB,
+# jadi harus TETAP ada. Sampai 22 Okt 2026 uji ini menuntut sebaliknya ("semua
+# sesi hilang"), karena sesi waktu itu hanya di memori — aturan itu dibatalkan
+# Deny lewat D8: app Tauri menutup sidecar tiap kali app ditutup, jadi sesi
+# memori berarti login ulang tiap buka app. Batasnya sekarang BOOT, bukan proses.
 import importlib
 importlib.reload(auth)
-cek("setelah 'restart', jumlah sesi", auth.jumlah_sesi(), 0)
-cek("token lama TIDAK sah setelah restart", auth.sesi_sah(t3), False)
+cek("setelah 'restart server', sesi masih ada", auth.jumlah_sesi() > 0, True)
+cek("token lama masih sah setelah 'restart server'", auth.sesi_sah(t3), True)
+
+# Yang membatalkan sesi: mesin restart. Simulasikan dengan UUID boot lain.
+_boot_asli = auth.BOOT_UUID
+auth.BOOT_UUID = "boot-lain-setelah-restart"
+mati = auth.sesi_sah(t3)
+auth.BOOT_UUID = _boot_asli
+cek("sesi mati kalau boot_uuid beda (laptop restart)", mati, False)
 
 print("\n9. Ganti password mengunci semua sesi")
 auth.pasang_password("rahasia123", path=TMP)
