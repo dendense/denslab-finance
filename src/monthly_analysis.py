@@ -351,7 +351,7 @@ def _ringkas_untuk_model(analisa):
 def _panggil_model(fakta):
     key = model_config.api_key()
     if not key:
-        raise RuntimeError("KENARI_API_KEY tidak ada di environment")
+        raise RuntimeError("Kunci API belum diatur (env maupun Data/finance/secrets.env)")
 
     body = {
         "model": MODEL,

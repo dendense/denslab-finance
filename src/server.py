@@ -901,7 +901,11 @@ def api_ai_status(params):
     model = model_config.MODEL
     endpoint = model_config.BASE
 
-    key = os.environ.get("KENARI_API_KEY", "").strip()
+    # Lewat `model_config.api_key()`, BUKAN `os.environ` langsung: kunci juga
+    # bisa datang dari DATA_DIR/secrets.env (kasus app dibuka dari Dock, tanpa
+    # shell yang me-`source` env.sh). Membaca env langsung di sini membuat
+    # panel bilang "belum diatur" padahal catat pintar hidup.
+    key = model_config.api_key()
     if not key:
         # Jangan sebut nama variabel environment ke UI — itu bocoran yang tidak
         # perlu diketahui browser. Cukup katakan belum diatur.
