@@ -36,10 +36,17 @@ PUBLIK = {"/login", "/login.html", "/masuk"}
 def _cookie_sesi(token):
     """Cookie sesi: httpOnly (JavaScript tidak bisa membacanya), SameSite=Lax.
 
-    Tanpa Max-Age: ini cookie SESI browser — hilang saat browser ditutup.
-    Umur sebenarnya ditentukan oleh server (token di memori), bukan cookie.
+    `Max-Age` WAJIB ada sejak 23 Okt 2026: WebView Tauri membuang cookie tanpa
+    Max-Age/Expires begitu app ditutup, sehingga sesi yang sudah bertahan di
+    server tidak pernah terkirim lagi. Umur cookie = umur sesi di server
+    (`auth.BATAS_UMUR_DETIK`); batas sebenarnya tetap dipegang boot UUID.
+
+    TANPA `Secure`, dan itu disengaja: server hanya mendengar di
+    `http://127.0.0.1`, dan WebView/browser tidak mengirim cookie `Secure`
+    lewat HTTP — login akan tampak berhasil lalu langsung logout.
     """
-    return "sesi=%s; Path=/; HttpOnly; SameSite=Lax" % token
+    return "sesi=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (
+        token, auth.BATAS_UMUR_DETIK)
 
 
 def api_summary(params):
@@ -969,8 +976,10 @@ def api_auth_status_lengkap(params):
     return {
         "sudah_ada_password": auth.sudah_ada_password(),
         "jumlah_sesi": auth.jumlah_sesi(),
-        "batas_diam_jam": auth.BATAS_DIAM_DETIK // 3600,
-        "catatan": "Sesi hilang kalau server dimatikan — itu memang disengaja.",
+        "umur_sesi_jam": auth.BATAS_UMUR_DETIK // 3600,
+        "catatan": "Sesi bertahan walau app ditutup — berakhir saat laptop "
+                   "di-restart atau setelah %d hari."
+                   % (auth.BATAS_UMUR_DETIK // 86400),
     }
 
 

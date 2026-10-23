@@ -260,3 +260,25 @@ SELECT
 FROM savings_goals g
 JOIN accounts a ON a.id = g.account_id
 LEFT JOIN v_account_balances b ON b.id = g.account_id;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- sesi — sesi login panel, bertahan melewati restart SERVER (D8, 23 Okt 2026)
+--
+-- Kenapa di DB dan bukan di memori proses: app Tauri menutup sidecar Python
+-- setiap kali app ditutup. Sesi di memori = login ulang tiap buka app.
+--
+-- Kenapa ada `boot_uuid`: sesi harus mati tepat saat LAPTOP restart, bukan saat
+-- server mati. `boot_uuid` = `kern.bootsessionuuid` saat sesi dibuat. UUID beda
+-- dengan boot sekarang -> sesi ditolak (lihat `auth.sesi_sah`).
+--
+-- Kenapa `token_hash` dan bukan token: DB ini di-backup dan bisa dibaca. Yang
+-- disimpan sha256(token), jadi isi tabel ini tidak bisa dipakai untuk masuk.
+-- `dibuat_pada`/`terakhir` = detik epoch sebagai teks; umur sesi 30 hari
+-- (`auth.BATAS_UMUR_DETIK`).
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sesi (
+    token_hash   TEXT PRIMARY KEY,
+    dibuat_pada  TEXT NOT NULL,
+    boot_uuid    TEXT NOT NULL,
+    terakhir     TEXT
+);
