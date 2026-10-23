@@ -22,6 +22,22 @@ from pathlib import Path
 SRC_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SRC_DIR.parent
 sys.path.insert(0, str(SRC_DIR))
+
+# Batas versi Python diperiksa SEBELUM modul lokal diimpor. Semua impor di atas
+# baris ini stdlib kuno (aman di versi berapa pun); `db`/`auth`/`model_config`
+# di bawah bisa memakai sintaks yang belum ada di interpreter tua, dan
+# kegagalannya akan terbaca seperti bug kode, bukan masalah environment.
+# `versi_python` sendiri hanya memakai `sys`, jadi aman diimpor paling awal.
+import versi_python  # noqa: E402
+
+versi_python.cek()
+
+# Bukan penolakan, cuma pemberitahuan: 3.9-3.10 masih sah. Ke `stderr` supaya
+# tidak bercampur dengan respons HTTP di stdout/log server.
+_p = versi_python.peringatan()
+if _p:
+    print(_p, file=sys.stderr)
+
 import db        # noqa: E402
 import auth      # noqa: E402
 import model_config  # noqa: E402
@@ -980,6 +996,9 @@ def api_auth_status_lengkap(params):
         "catatan": "Sesi bertahan walau app ditutup — berakhir saat laptop "
                    "di-restart atau setelah %d hari."
                    % (auth.BATAS_UMUR_DETIK // 86400),
+        # True kalau interpreter < REKOMENDASI (3.11). Server tetap jalan; ini
+        # hanya supaya UI bisa menampilkan peringatan yang sama dengan stderr.
+        "python_di_bawah_rekomendasi": versi_python.peringatan() is not None,
     }
 
 
