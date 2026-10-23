@@ -21,13 +21,23 @@ Isinya tetap aplikasi finance yang sudah ada — **tidak ada logika uang yang di
 ## 2. Non-tujuan (tegas)
 
 - BUKAN port ulang backend ke Rust. Python tetap backend-nya.
-- BUKAN UI baru. `web/` yang sekarang dipakai apa adanya.
+- BUKAN rewrite UI serentak. UI ditulis ulang **bertahap** ke React (Vite); `web/app.js` (4.645 baris)
+  tetap jadi **acuan perilaku** selama rewrite, dan `web/` **tetap disajikan Python** sampai rewrite
+  selesai — supaya browser dan `.app` memakai UI yang sama selama transisi.
 - BUKAN aplikasi untuk dibagikan ke orang lain. Satu mesin, satu pengguna.
 - BUKAN pengganti server manual `:8791`. Keduanya harus bisa jalan bersamaan.
 
-"UI" di sini berarti `web/`. Layar milik shell (splash, layar error, pemilih folder, menu) memang ada
-dan didesain di §9, §9A, §9B — itu bukan UI baru untuk aplikasi finance, hanya penanganan keadaan
-yang tidak dimiliki `web/`.
+Tahapan rewrite — jangan diklaim selesai sebelum waktunya:
+
+```
+Tahap 1 (sekarang): .app memuat web/ lewat Python. UI lama, jalan.
+Tahap 2: komponen React ditulis bertahap; tiap komponen yang selesai menggantikan bagian setara.
+Tahap 3: web/ pensiun setelah semua layar pindah dan diverifikasi.
+```
+
+"UI" di sini berarti `web/` (Tahap 1–2) lalu komponen React (Tahap 3). Layar milik shell (splash, layar
+error, pemilih folder, menu) memang ada dan didesain di §9, §9A, §9B — itu bukan UI baru untuk aplikasi
+finance, hanya penanganan keadaan yang tidak dimiliki `web/`.
 
 ## 3. Bentuk
 
@@ -36,6 +46,11 @@ Tauri v2, mode **sidecar**:
 - Rust menyalakan proses Python saat app dibuka.
 - Rust mematikan proses itu saat app ditutup.
 - WebView menunjuk ke server yang baru dinyalakan itu.
+
+Peran Vite + React: **alat dev saja**. `pnpm dev` (Vite, `http://localhost:1420`) dipakai untuk HMR saat
+mengembangkan komponen React. Build produksi **tidak** membundel frontend ke dalam `.app` —
+`frontendDist` tidak dipakai untuk produksi; `.app` memuat server Python. Alasan kerasnya ada di D4
+(origin sama, cookie sesi).
 
 Ditolak: mode "titik ke `:8791`". Itu hanya membungkus tab browser dan tetap butuh server yang sudah
 jalan — tidak menyelesaikan masalah yang mendasari.
@@ -72,7 +87,7 @@ Ini langsung terkait Q1 dan Q5.
 | D1 | Sidecar, bukan titik-ke-port | Tanpa sidecar, app kosong kalau server belum jalan |
 | D2 | Port ephemeral, bukan `8791` | App punya instance sendiri; `8791` bisa dipakai server manual |
 | D3 | Nol akses DB dari Rust | Satu sumber kebenaran untuk matematika uang |
-| D4 | `web/` tetap disajikan Python | Ubah UI tidak perlu rebuild `.app`, cukup reload |
+| D4 | `web/` tetap disajikan Python; `.app` memuat `http://127.0.0.1:<P>/`, bukan bundel Vite | (a) Ubah UI tidak perlu rebuild `.app`, cukup reload. (b) **Origin sama (23 Okt 2026):** cookie sesi `SameSite=Lax` **tidak terkirim** lintas-origin — WebView `tauri://localhost` yang memanggil API `127.0.0.1` membuat setiap `/api/*` balas **401**; gejalanya terbaca seperti "sesi tidak persisten" padahal sesinya benar |
 | D5 | Single instance | Klik kedua fokus ke jendela yang ada, bukan menyalakan server kedua |
 | D6 | Ad-hoc sign, bukan Developer ID | Pemakaian sendiri; $99/tahun tidak perlu |
 | D7 | Bind loopback `127.0.0.1` | Tidak bisa diakses dari jaringan |
