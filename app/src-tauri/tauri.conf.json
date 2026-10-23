@@ -1,0 +1,17 @@
+{
+  "productName": "Finance",
+  "version": "0.1.0",
+  "identifier": "id.denslab.finance",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "active": true,
+    "targets": "app",
+    "icon": ["icons/icon.icns"]
+  }
+}
