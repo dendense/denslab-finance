@@ -386,15 +386,29 @@ penanganan, "tidak perlu terminal" bisa berakhir dengan "Python tidak ditemukan"
 
 **Urutan pencarian interpreter Python** (sama polanya dengan §10, tanpa mengubah fungsi sidecar):
 
-1. Config: field `python_path` di berkas yang sama dengan `repo_path`.
-2. Venv di repo, jika ada (mis. `<repo>/.venv/bin/python3`) — **hanya setelah Q9 memastikan itu yang dipakai server**.
-3. Lokasi Homebrew: `/opt/homebrew/bin/python3`, lalu `/usr/local/bin/python3`.
-4. `/usr/bin/python3` hanya sebagai pilihan terakhir; tanpa Command Line Tools, memanggilnya
-   memunculkan dialog pemasangan. Cek keberadaan toolchain dulu, jangan langsung menjalankannya.
+1. Env `FINANCE_PYTHON` (kalau diset), atau field `python_path` di berkas config yang sama dengan
+   `repo_path` (X6) — override manual, didahulukan apa pun isinya.
+2. `/opt/homebrew/bin/python3.11` — **UTAMAKAN**. Symlink stabil Homebrew. **Jangan** memakai
+   `/opt/homebrew/Cellar/python@3.11/<versi>/bin/python3.11`: path itu berubah tiap `brew upgrade`.
+   `/opt/homebrew/bin/python3` **tidak ada** di mesin ini (Homebrew hanya memasang nama berversi),
+   jadi jangan dijadikan patokan.
+3. Venv di repo, jika ada (mis. `<repo>/.venv/bin/python3`; venv selalu menyediakan nama `python3`)
+   — **hanya setelah Q9 memastikan itu yang dipakai server**. Versinya tetap diverifikasi ≥ 3.9.
+4. Probe `python3` di `PATH`, **tapi wajib diverifikasi** `--version` ≥ **3.9** sebelum dipakai —
+   3.9 adalah **lantai sintaks** kode ini (terbukti: `py_compile` 30/30 dan suite hijau di 3.9.6),
+   bukan target. Di mesin ini `PATH` bawaan Dock berujung ke `/usr/bin/python3` = **3.9.6**.
+5. Kalau yang terpilih versinya < **3.11**: **JALANKAN**, tapi cetak **peringatan ke `stderr`**
+   (satu baris, menyebut versi, path interpreter, dan cara memperbaikinya). Alasannya: Python
+   bawaan sistem Apple deprecated sejak macOS 12.3 dan akan dihapus. Server tetap melayani normal;
+   peringatan yang sama juga terekspos di `/api/auth/status` sebagai `python_di_bawah_rekomendasi`.
+6. Kalau < **3.9**: **TOLAK**. Pesan wajib menyebut **setiap path yang dicoba**, **versi yang
+   ditemukan** di path itu, dan **versi minimum** yang dibutuhkan (≥ 3.9).
+7. Tidak ada kandidat sama sekali → layar error "Python tidak ditemukan" (§9A), dengan daftar
+   lokasi yang sudah dicari.
 
 Interpreter yang dipakai diverifikasi dengan `--version` saat launch (sesuai §13) dan dicatat di log.
-Tidak ada yang ditemukan → layar error "Python tidak ditemukan" (§9A), dengan daftar lokasi yang
-sudah dicari.
+Angka 3.9 dan 3.11 sengaja berbeda peran: **3.9 = boleh jalan**, **3.11 = seharusnya dipakai**.
+Menolak 3.9.6 tidak lagi benar — kode terbukti jalan di sana (keputusan Deny, 23 Okt 2026).
 
 ## 11. Keamanan
 
@@ -418,6 +432,18 @@ sudah dicari.
 - Update: tidak ada auto-update. Rebuild manual kalau perlu.
 - **[RISIKO]** `identifier` aplikasi (reverse-DNS) ditetapkan **sekali** dan tidak diubah. Mengubahnya
   membuat WebView memakai penyimpanan baru: cookie sesi (§8) dan data `localStorage` (Q8) hilang.
+
+**Toolchain build (Tauri v2).** Dipatok supaya build pertama tidak gagal karena toolchain kebetulan
+terlalu tua dengan pesan yang menyesatkan:
+
+- **MSRV Rust: 1.90.** Ini MSRV resmi Tauri v2 — crate `tauri` 2.12.5 (crates.io, 21 Okt 2026)
+  mencantumkan `rust_version = 1.90`, dan blog rilis Tauri 2.12 (`v2.tauri.app/blog/tauri-2.12/`)
+  menaikkan MSRV ke 1.90 dengan kebijakan `stable - 3`. Cek `rustc --version` ≥ 1.90 sebelum scaffold.
+- **Target triple: `aarch64-apple-darwin`** (mesin ini `arm64`, macOS 26.5.1 build 25F80).
+  Pasang sekali: `rustup target add aarch64-apple-darwin`.
+- **CARGO_HOME/RUSTUP_HOME:** Rust di mesin ini dipasang via rustup dengan CARGO_HOME/RUSTUP_HOME
+  **di luar lokasi default** (bukan `~/.cargo`/`~/.rustup`). Perintah `cargo`/`rustup` butuh kedua
+  variabel itu diset; tanpa itu toolchain terlihat "tidak ada" padahal terpasang.
 
 ## 13. Risiko
 
