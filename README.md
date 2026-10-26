@@ -1,285 +1,136 @@
-# monica-finance*
+# Finance (denslab-finance)
 
-Pencatatan keuangan pribadi yang berjalan di komputermu sendiri. Catat
-pemasukan dan pengeluaran lewat kalimat biasa, lihat posisi keuangan, dan
-baca analisa bulanan.
-*memakai nama monica karena menggunakan nama AI Agent yang ku atur sebagai Financial Advisor.
+Pencatatan keuangan pribadi yang jalan di komputer sendiri: catat pemasukan dan
+pengeluaran lewat kalimat biasa, lalu lihat posisi keuangan dan analisa bulanan.
+Dibuat untuk satu orang di satu Mac.
 
-```
-┌──────────────────────────────────────────────┐
-│  Chat:                                       │
-│  "makan siang 35rb"                          │
-│                                              │
-│  → draft: 2026-10-03 · keluar · Rp 35.000    │
-│            Makan · BRI                       │
-│                                              │
-│  [ Simpan ]  [ Ubah ]  [ Batal ]             │
-└──────────────────────────────────────────────┘
-```
+## Status
 
-AI hanya menyiapkan **draft**. Tidak ada yang tersimpan sampai kamu tekan
-Simpan. Kalau AI salah menebak, kamu betulkan dulu.
+Yang jalan: panel web lokal (`src/server.py`), catat lewat chat dengan AI (opsional),
+transfer antar akun, piutang dan utang, target tabungan, tren bulanan, analisa bulanan,
+backup otomatis sebelum server dinyalakan.
 
----
+Yang belum: aplikasi desktop di `app/` masih kerangka (Tauri 2 + Vite + React). Sumbernya
+ada dan `app/src-tauri/target/` diabaikan git. Repo ini tidak punya CI.
 
-## Kenapa ini ada
+## Kebutuhan
 
-Aplikasi keuangan biasanya menyimpan datamu di server orang lain. Yang ini
-tidak: databasenya SQLite, servernya di komputermu, dan tidak ada koneksi
-keluar kecuali saat AI menebak kategori dari kalimatmu.
+- Python 3.9 minimum, 3.11 direkomendasikan — `MINIMUM = (3, 9)` dan
+  `REKOMENDASI = (3, 11)` di `src/versi_python.py`. Di bawah 3.9 server menolak jalan.
+- `sqlite3` CLI, dipakai `scripts/backup-db.sh`.
+- Opsional: Node + npm hanya kalau mengubah panel (`web/package.json`).
+- Opsional: Node + pnpm dan Rust 1.90+ (`app/src-tauri/Cargo.toml`) untuk aplikasi desktop.
 
-Datamu tidak pernah dikirim ke mana pun untuk disimpan. Tidak ada akun, tidak
-ada langganan, tidak ada syarat layanan.
-
----
-
-## Menjalankan
-
-Butuh **Python 3.10+**. Tidak butuh Node.js, tidak butuh Docker.
+## Cara jalan
 
 ```bash
-git clone <url-repo>
+git clone https://github.com/dendense/denslab-finance.git
 cd finance
 python3 src/server.py --port 8791
 ```
 
-Buka `http://localhost:8791`. Database dibuat otomatis saat server pertama kali
-jalan, lengkap dengan 11 kategori bawaan.
+Buka `http://localhost:8791`. Database dibuat otomatis saat pertama jalan (`init_db()` di
+`src/db.py`) lengkap dengan 11 kategori bawaan. Akun sengaja kosong — tambahkan sendiri di
+layar Akun, karena apa pun di `src/seed.sql` akan muncul kembali setiap server dinyalakan.
 
-### Backup otomatis
+Port bawaan `src/server.py` adalah **8765**; `8791` dipakai karena itu port
+`scripts/start-server.sh` (`FIN_PORT`, bawaan 8791).
 
-`scripts/start-server.sh` membuat backup `finance.db` **sebelum** server start,
-lalu menyalakan server. Backup memakai `sqlite3 .backup` (bukan `cp`: menyalin
-berkas DB yang sedang hidup bisa menghasilkan salinan rusak), memeriksa
-`PRAGMA integrity_check` pada salinannya, dan membuang salinan yang tidak lolos.
+Launcher dengan backup otomatis:
 
 ```bash
-bash scripts/start-server.sh            # backup + start (kalau belum jalan)
-bash scripts/start-server.sh --restart  # backup + restart
+bash scripts/start-server.sh            # backup lalu start (kalau belum jalan)
+bash scripts/start-server.sh --restart  # backup lalu restart
 bash scripts/backup-db.sh               # backup saja
 ```
 
-Tujuan: `~/Documents/AI/Backup/finance/finance-YYYYMMDD-HHMMSS.db` (di luar
-repo dan di luar folder data). Kalau `Backup/finance/` tidak ada — mis. `Backup/`
-dipindah ke disk external dan external tidak terpasang — skrip **membatalkan
-backup** (`exit 1`) alih-alih membuat folder liar di disk internal. Simpan 30
-terakhir — ubah dengan
-`FINANCE_BACKUP_KEEP`. Kalau backup gagal, **server tetap dinyalakan** dan
-kegagalannya dicatat di log: aplikasi yang mati karena backup gagal lebih buruk
-daripada aplikasi yang jalan tanpa backup hari itu.
+Backup memakai `sqlite3 .backup` (bukan `cp`), memeriksa `PRAGMA integrity_check` pada
+salinannya, dan menyimpan 30 terakhir (`FINANCE_BACKUP_KEEP`) di
+`~/Documents/AI/Backup/finance/`. Kalau folder tujuan tidak ada, backup dibatalkan
+(`exit 1`) — server tetap dinyalakan dan kegagalannya masuk log.
 
-**Akun sengaja kosong — kamu membuatnya sendiri.** Buka layar **Akun** dan
-tambahkan rekening yang kamu pakai (tabungan, dompet digital, uang tunai)
-beserta saldo awalnya. Setelah itu kamu bisa mulai mencatat.
-
-Kenapa tidak diisi contoh: akun bawaan akan **muncul kembali setiap server
-dinyalakan**. Dulu ada `Tunai` dan `BCA` di berkas data awal — Deny menghapus
-`Tunai`, menyalakan ulang server, dan akunnya kembali dengan id baru. Lebih baik
-mulai dari kosong daripada punya akun hantu yang tidak bisa dihapus.
-
-### Menyiapkan AI untuk kolom catat (opsional)
-
-Kolom catat bisa menebak kategori dari kalimatmu, tapi perlu satu endpoint AI
-yang kompatibel dengan OpenAI. Tanpa ini, **aplikasinya tetap jalan** — kamu
-cukup mengisi form secara manual.
-
-Konfigurasinya ada di `src/model_config.py`. Bawaannya API kenari.id:
-
-```bash
-# tidak perlu diatur — ini bawaannya
-# https://kenari.id/v1/chat/completions
-```
-
-Kalau ingin lewat router lokal (mis. omniroute), timpa alamatnya:
-
-```bash
-export KENARI_BASE="http://localhost:20128/v1/chat/completions"
-export KENARI_API_KEY="<kunci>"   # wajib kalau mau memakai AI
-```
-
-`KENARI_BASE` **opsional** — bawaannya `https://kenari.id/v1/chat/completions`.
-Normalisasinya: nilai yang berakhir `/v1` atau `/v1/` otomatis ditambah
-`chat/completions`, jadi `export KENARI_BASE="https://kenari.id/v1"` juga benar.
-Nilai yang sudah berakhir `/chat/completions` dipakai apa adanya.
-
-`KENARI_API_KEY` tidak punya bawaan; tanpa isinya, kolom catat jatuh ke
-pengisian manual (aplikasi tetap jalan).
-
-Perlu diperhatikan: **nama model di kenari.id tidak memakai awalan `kenari/`.**
-Awalan itu konvensi router omniroute. Lewat kenari.id langsung, nama modelnya
-`deepseek-v4-1-flash` — memakai `kenari/deepseek-v4-1-flash` menghasilkan
-HTTP 400 `no price for model`.
-
-Untuk mengganti model, ubah `MODEL` di `src/model_config.py`, lalu **uji
-akurasinya** sebelum dipakai mencatat:
-
-```bash
-python3 scripts/uji_model.py <nama-model>
-```
-
-Kenapa harus diuji: dari empat model yang pernah dicoba, **tiga gagal di semua
-kasus** — bukan karena kode, tapi karena kuota gratisnya habis atau modelnya
-sudah dicabut. Model yang "hidup" belum tentu bisa menebak dengan benar.
-
-### Di mana datanya disimpan
-
-Secara bawaan **di luar folder repo**, di `../Data/finance/`:
-
-```
-folder-induk/
-├── finance/            ← hasil git clone (kode)
-└── Data/finance/       ← database, kredensial, rekening koran (DATAMU)
-```
-
-Pemisahan ini disengaja. Kalau datamu ada di dalam repo, satu salah ketik
-`git add -f` bisa mengirimnya ke GitHub — dan **menghapusnya tidak cukup**,
-karena git menyimpan riwayat. Pemisahan fisik mencegahnya; `.gitignore` hanya
-mengingatkan.
-
-Mau menaruh datamu di tempat lain? Arahkan lewat `FINANCE_DATA`:
-
-```bash
-FINANCE_DATA=/Volumes/disk-luar/finance-data python3 src/server.py --port 8791
-```
-
----
-
-## Memasang password
-
-Panel bisa dibuka siapa pun yang mengakses port-nya. Di Mac pribadi itu
-biasanya tidak masalah, tapi lebih baik dipasang:
+Password panel (opsional):
 
 ```bash
 python3 scripts/reset_password.py
 ```
 
-Sesi bertahan sampai kamu keluar — atau sampai server dimatikan. Kalau server
-mati di tengah jalan, kamu diminta masuk lagi. Itu disengaja: sesi hidup di
-memori, jadi tidak ada berkas sesi yang bisa dicuri dari disk.
-
----
-
-## Bentuk datanya
-
-Tiga kolom yang paling sering tertukar:
-
-| Kolom | Artinya | Nilainya |
-|---|---|---|
-| `direction` | ke mana uang mengalir | `in` · `out` · `transfer` |
-| `flow_type` | sifat transaksinya | `expense` · `income` · `receivable` · `debt_payment` · `transfer` |
-| `category` | jenisnya | Makan · Transport · Tagihan · … |
-
-**`flow_type` itu penting dan tidak jelas dari namanya.**
-
-Bayangkan bulan ini kamu mengeluarkan Rp 2.100.000. Terdengar boros. Tapi
-kalau dipisah: **hanya Rp 284.000 yang benar-benar habis dikonsumsi** —
-sisanya pelunasan utang (uangmu memang sudah dipakai sebelumnya) dan talangan
-untuk project yang akan dibayar kembali.
-
-Tanpa pemisahan itu, laporan bulanan menakut-nakuti tanpa alasan. Karena itu
-setiap transaksi keluar wajib punya `flow_type`, dan aplikasinya menolak
-menyimpan tanpa itu.
-
-Rinciannya di `docs/SCHEMA.md`.
-
----
-
-## Yang bisa dilakukan
-
-- **Catat lewat chat** — ketik kalimat, AI menyiapkan draft, kamu konfirmasi
-- **Pemasukan & pengeluaran** dengan kategori dan akun
-- **Transfer** antar akun sendiri
-- **Piutang** (uang talangan yang akan kembali) dan **utang** (cicilan)
-- **Posisi keuangan** — total kekayaan, dipisah likuid dan tidak likuid
-- **Tren** — perbandingan beberapa bulan
-- **Analisa bulanan** — sisa uang, saran hemat berangka, catatan AI
-- **Target tabungan** dengan progres dari saldo akun
-- **Impor rekening koran** dari PDF bank (lihat `scripts/`)
-
----
+Sesi disimpan di tabel `sesi` dan terikat ke `kern.bootsessionuuid`: bertahan melewati
+restart server, mati saat laptop restart, dan kedaluwarsa 30 hari (`BATAS_UMUR_DETIK` di
+`src/auth.py`).
 
 ## Struktur
 
-```
-finance/
-├── src/                    kode yang jalan
-│   ├── db.py               lapisan data — SEMUA angka lewat sini
-│   ├── schema.sql          tabel + view (berdiri sendiri, tanpa migrasi)
-│   ├── seed.sql            akun & kategori awal
-│   ├── migrations/         perubahan skema setelah versi pertama
-│   ├── server.py           API + penyaji panel
-│   ├── auth.py             password & sesi
-│   ├── parser_wrap.py      kalimat → draft transaksi
-│   ├── monthly_analysis.py analisa bulanan + narasi AI
-│   └── model_config.py     model AI yang dipakai
-├── web/                    panel di browser
-├── tests/                  uji
-├── scripts/                alat sekali-pakai (impor, reset password)
-├── docs/                   dokumen penjelasan
-└── requests/               catatan pekerjaan yang belum tuntas
+- `src/` — server: `server.py` (HTTP API + penyaji panel), `db.py` (semua angka),
+  `schema.sql`, `seed.sql`, `migrations/`, `auth.py`, `parser_wrap.py`,
+  `monthly_analysis.py`, `model_config.py`, `versi_python.py`
+- `web/` — panel HTML/JS; `tailwind.css` hasil build (`npm run css`)
+- `app/` — kerangka aplikasi desktop Tauri
+- `scripts/` — launcher, backup, reset password, uji model, alat sekali-pakai
+- `tests/` — 20 berkas uji
+- `docs/` — `SCHEMA.md`, `CONTRACT.md`, `PLAN.md`
+- `requests/` — catatan permintaan antar-agent yang belum selesai
+
+## Konfigurasi
+
+| Env | Wajib | Fungsi |
+|---|---|---|
+| `FINANCE_DATA` | tidak | folder data; bawaan `../Data/finance`, di luar repo |
+| `KENARI_API_KEY` | tidak | kunci endpoint AI; tanpa ini kolom catat jatuh ke isian manual |
+| `KENARI_BASE` | tidak | alamat endpoint AI; bawaan `https://kenari.id/v1/chat/completions` |
+| `FINANCE_BACKUP_DIR` | tidak | folder tujuan backup |
+| `FINANCE_BACKUP_KEEP` | tidak | jumlah backup yang disimpan, bawaan 30 |
+| `FINANCE_PYTHON` | tidak | interpreter Python yang dipakai `app/` |
+| `FIN_PORT` | tidak | port `scripts/start-server.sh`, bawaan 8791 |
+
+`KENARI_API_KEY` dan `KENARI_BASE` juga dibaca dari `<FINANCE_DATA>/secrets.env` kalau env
+tidak menyetelnya — env menang. Berkas itu tidak di-`source`, isinya tidak pernah
+dieksekusi.
+
+Model AI diatur di `src/model_config.py` (`MODEL`, `MODEL_CADANGAN`). Setelah mengganti
+model, uji dulu:
+
+```bash
+python3 scripts/uji_model.py <nama-model>
 ```
 
----
+Nama model lewat kenari.id tidak memakai awalan `kenari/`; awalan itu konvensi router lain
+dan menghasilkan HTTP 400 `no price for model`.
 
-## Menjalankan uji
+## Test
 
 ```bash
 for t in tests/test_*.py; do python3 "$t"; done
 ```
 
-Semua uji memakai database **sementara** di direktori temp. Datamu tidak
-tersentuh — dan `tests/test_analysis_handler.py` memeriksa hal itu secara
-khusus, karena pernah ada versi uji yang menulis ke database asli.
+20 berkas uji, semuanya skrip biasa (tanpa pytest). Uji yang menyentuh database memakai
+folder sementara dari `tempfile`. Pengecualian: `tests/test_analysis_live.py` memanggil
+model AI sungguhan — butuh `KENARI_API_KEY` dan memakai kuota.
 
-Uji-uji ini menangkap bug yang **tidak menimbulkan error**: angka yang berubah
-diam-diam. Kalau kamu mengubah `src/schema.sql` atau `src/db.py`, jalankan
-semuanya.
+## Aplikasi desktop
 
----
+```bash
+cd app
+pnpm install
+pnpm tauri build
+```
 
-## Tiga aturan yang dipegang kode ini
+Hasil: `app/src-tauri/target/release/bundle/macos/Finance.app` (tidak masuk git).
+`identifier` = `id.denslab.finance`. Sidecar menjalankan `python3 src/server.py --port N`
+dengan port dipilih Rust. Repo dicari dari `~/Library/Application Support/Finance/config.json`
+(kunci `repo_path`), lalu lewat `FINANCE_PYTHON` atau `python_path` di config itu.
 
-**1. Angka tidak pernah dikarang.** Kalau data tidak ada, jawabannya "datanya
-belum ada" — bukan perkiraan yang disajikan seolah tercatat. Kalau sebuah angka
-hasil ekstrapolasi, itu ditandai.
+## Catatan
 
-**2. UI tidak menghitung angka keuangan.** Semua angka datang dari `src/db.py`.
-Kalau UI menjumlahkan sendiri, cepat atau lambat UI dan laporan berbeda dan
-tidak ada yang tahu mana yang benar.
+- Server hanya mendengarkan `127.0.0.1`; tidak ada flag `--host`. Akses dari HP butuh
+  perubahan kode.
+- Satu pengguna, satu database: tidak ada tabel pengguna dan tidak ada login terpisah.
+- Data disimpan di luar folder repo secara fisik; `.gitignore` hanya pengingat.
+- Tidak ada koneksi ke bank. `scripts/import_statement_okt.py` adalah skrip sekali-pakai
+  untuk satu rekening koran tertentu — angkanya tertulis di skrip, bukan hasil parse PDF.
+- `flow_type` wajib di skema (`NOT NULL` + `CHECK`) dan harus cocok dengan `direction`;
+  kalau kosong, `src/db.py` menurunkannya dari `direction`.
+- Menambah perubahan skema: berkas baru di `src/migrations/` (jangan edit yang lama) plus
+  perbarui `src/schema.sql`, lalu jalankan semua uji.
 
-**3. Perbedaan saldo adalah temuan, bukan masalah yang dirapikan.** Kalau angka
-sistem tidak cocok dengan rekening asli, itu dilaporkan — tidak dibulatkan.
-
----
-
-## Batas yang perlu kamu tahu
-
-**Satu pengguna, satu database.** Tidak ada konsep "akun pengguna" di dalam
-aplikasi ini. Kalau dua orang menjalankannya di komputer yang sama, mereka
-berbagi satu database dan saling melihat data. Untuk pemakaian pribadi di
-Mac-mu sendiri, itu tepat. Untuk banyak orang, ini perlu dikerjakan lagi.
-
-**Hanya bisa diakses dari komputer tempat server jalan.** Tidak ada akses dari
-HP, kecuali kamu sengaja membukanya ke jaringan (`--host 0.0.0.0`) — dan kalau
-itu dilakukan, **pasang password lebih dulu**.
-
-**Transaksi dimasukkan manual.** Tidak ada koneksi ke bank. Rekening koran bisa
-diimpor dari PDF, tapi sisanya kamu ketik sendiri. Itu keputusan sadar: koneksi
-bank otomatis butuh kredensial perbankan, dan itu risiko yang tidak sebanding.
-
----
-
-## Menambah perubahan skema
-
-1. Tulis berkas baru di `src/migrations/` — jangan edit migrasi lama, berkas itu
-   jejak perubahan.
-2. Perbarui juga `src/schema.sql` supaya database baru tidak butuh migrasi.
-   (Pernah terjadi sebaliknya: `flow_type` hanya ada di migrasi, sehingga
-   database yang dibangun dari nol langsung mati.)
-3. Jalankan semua uji.
-
----
-
-## Lisensi
-
-MIT — lihat `LICENSE`. Pakai, ubah, sebarkan sesukamu.
+MIT — lihat `LICENSE`.
