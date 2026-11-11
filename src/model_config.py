@@ -38,14 +38,20 @@ from pathlib import Path
 # router omniroute, bukan nama asli di API kenari.id. Lewat kenari.id langsung,
 # modelnya cuma "deepseek-v4-flash" — memakai awalan menghasilkan
 # HTTP 400 "no price for model 'kenari/deepseek-v4-flash'".
-MODEL = "deepseek-v4-flash"
+#
+# 11 Nov 2026: diganti ke qwen3-8-27b:free (gratis) — uji_model 14/15, 0 JSON
+# rusak, 0 kosong. Setara dengan llama-3-3-70b-instruct:free (14/15, 0 rusak).
+# Pembanding yang gagal: nemotron-3-5-lightning:free 1/15 (12 rusak),
+# qwen3-6-27b:free 3/15 (11 rusak), longcat-2-5:free 0/15 (HTTPError).
+# Kegagalan 14/15 di kedua model sama: "top up gopay 100000" (ambigu).
+MODEL = "qwen3-8-27b:free"
 
 # Cadangan kalau model utama mati. Yang gratis, supaya pencatatan tidak
 # pernah benar-benar berhenti walaupun kuota habis.
-# 7 Nov 2026: agnes-2-0-flash:free sudah dicabut dari kenari.id (HTTP 400,
-# tak ada di /v1/models). Ganti ke agnes-3-0-flash:free yang diuji balas JSON
-# valid untuk sampel yang sama.
-MODEL_CADANGAN = "agnes-3-0-flash:free"
+# 11 Nov 2026: diganti ke llama-3-3-70b-instruct:free (keluarga model
+# berbeda dari utama, supaya cadangan berguna kalau utama dicabut).
+# Sebelumnya agnes-3-0-flash:free; agnes-2-0-flash:free sudah dicabut (7 Nov).
+MODEL_CADANGAN = "llama-3-3-70b-instruct:free"
 
 # Bawaan: kenari.id langsung. Tidak perlu omniroute.
 # Kalau ingin lewat router lokal, set KENARI_BASE=http://localhost:20128/v1/chat/completions
