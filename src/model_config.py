@@ -24,18 +24,34 @@ from pathlib import Path
 #   kenari/glm-4-7-flash:free    0/15  request gagal semua
 #   kenari/deepseek-v4-1-flash  14/15  DIPAKAI -> kuota masih cukup
 #
+# 7 Nov 2026: deepseek-v4-1-flash berhenti mematuhi instruksi JSON — semua
+# balasannya prosa chatty (bukti respons mentah di wallet kartu). response_format
+# json_object pun diabaikannya. Diganti ke deepseek-v4-flash yang diuji ulang
+# 7 Nov 2026 lewat jalur persis chat_entry (stream=true): balas JSON valid,
+# "beli cemilan malam ini 179000" -> {"direction":"out","amount":179000,
+# "category":"Makan","occurred_on": today}.
+#
 # Satu-satunya kasus yang gagal di semua model: "top up gopay 100000" —
 # kalimatnya memang ambigu (pindah ke saldo, atau pengeluaran?). Bukan cacat
 # model; ini alasan layar konfirmasi punya chip koreksi flow_type.
 # PENTING: nama model TIDAK memakai awalan "kenari/". Awalan itu konvensi
 # router omniroute, bukan nama asli di API kenari.id. Lewat kenari.id langsung,
-# modelnya cuma "deepseek-v4-1-flash" — memakai awalan menghasilkan
-# HTTP 400 "no price for model 'kenari/deepseek-v4-1-flash'".
-MODEL = "deepseek-v4-1-flash"
+# modelnya cuma "deepseek-v4-flash" — memakai awalan menghasilkan
+# HTTP 400 "no price for model 'kenari/deepseek-v4-flash'".
+#
+# 11 Nov 2026: diganti ke qwen3-8-27b:free (gratis) — uji_model 14/15, 0 JSON
+# rusak, 0 kosong. Setara dengan llama-3-3-70b-instruct:free (14/15, 0 rusak).
+# Pembanding yang gagal: nemotron-3-5-lightning:free 1/15 (12 rusak),
+# qwen3-6-27b:free 3/15 (11 rusak), longcat-2-5:free 0/15 (HTTPError).
+# Kegagalan 14/15 di kedua model sama: "top up gopay 100000" (ambigu).
+MODEL = "qwen3-8-27b:free"
 
 # Cadangan kalau model utama mati. Yang gratis, supaya pencatatan tidak
 # pernah benar-benar berhenti walaupun kuota habis.
-MODEL_CADANGAN = "agnes-2-0-flash:free"
+# 11 Nov 2026: diganti ke llama-3-3-70b-instruct:free (keluarga model
+# berbeda dari utama, supaya cadangan berguna kalau utama dicabut).
+# Sebelumnya agnes-3-0-flash:free; agnes-2-0-flash:free sudah dicabut (7 Nov).
+MODEL_CADANGAN = "llama-3-3-70b-instruct:free"
 
 # Bawaan: kenari.id langsung. Tidak perlu omniroute.
 # Kalau ingin lewat router lokal, set KENARI_BASE=http://localhost:20128/v1/chat/completions

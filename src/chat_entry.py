@@ -60,6 +60,32 @@ Aturan WAJIB:
     ", ".join(KATEGORI), date.today().isoformat())
 
 
+def _muat_json(txt):
+    """json.loads yang tahan respons tidak rapi: pagar kode, prosa pembuka.
+
+    Urutan: coba utuh dulu; kalau gagal, ambil substring dari `{` pertama ke
+    `}` terakhir; kalau masih gagal, None. Panjang kandidat dibatasi supaya
+    prosa raksasa tidak membuat json.loads bekerja sia-sia.
+    """
+    def coba(s):
+        s = s.strip()
+        if not (s.startswith("{") and s.endswith("}")):
+            return None
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            return None
+
+    data = coba(txt)
+    if data is not None:
+        return data
+    a = txt.find("{")
+    b = txt.rfind("}")
+    if a != -1 and b > a and b - a <= 20000:
+        return coba(txt[a:b + 1])
+    return None
+
+
 def parse(text):
     """Kirim ke model, kembalikan dict hasil parse.
 
@@ -131,11 +157,19 @@ def parse(text):
     txt = "".join(chunks).strip().replace("```json", "").replace("```", "").strip()
     if not txt:
         return {"transactions": [], "question": "Model tidak membalas (content kosong)."}
-    try:
-        data = json.loads(txt)
-    except json.JSONDecodeError:
+    data = _muat_json(txt)
+    if data is None:
+        # Jangan telan diam-diam: respons mentah dicatat ke log server supaya
+        # ada bukti kalau model mulai membalas di luar format. Hanya dipangkas
+        # supaya satu baris log tidak meledak.
+        import traceback
+        print("[chat_entry] respon model bukan JSON (%d karakter), dipakai teks "
+              "cadangan. Potongan: %.300s" % (len(txt), txt), flush=True)
+        print(traceback.format_stack()[-2].strip(), flush=True)
         return {"transactions": [],
-                "question": "Jawaban model bukan JSON valid. Coba tulis ulang pesanmu."}
+                "question": "Catat pintar tidak bisa memahami pesanmu sekarang — "
+                            "model menjawab di luar format. Coba tulis ulang, "
+                            "atau isi manual."}
 
     # Tanggal null -> isi hari ini dan tandai diasumsikan. Kalau dibiarkan null,
     # transaksinya tidak akan muncul di laporan bulan mana pun.
