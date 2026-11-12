@@ -16,7 +16,113 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{AppHandle, Manager, RunEvent, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+// Tampilan Mac untuk panel web, disuntikkan dari sisi Rust supaya kode web (web/)
+// tidak perlu tahu bahwa ia berjalan di dalam app.
+// - Bilah judul transparan (overlay): lampu jendela (merah/kuning/hijau) tampil di
+//   atas panel, jadi panel diberi ruang 28px di atas.
+// - Strip 28px di atas dengan data-tauri-drag-region supaya jendela bisa diseret.
+const MAC_INIT: &str = r##"
+(function () {
+  var CSS = 'html.finance-mac body { padding-top: 28px; }' +
+            ' #finance-drag { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 60; }';
+  function pasang() {
+    var d = document;
+    if (!d.documentElement) return;
+    d.documentElement.classList.add('finance-mac');
+    if (!d.getElementById('finance-mac-style')) {
+      var s = d.createElement('style');
+      s.id = 'finance-mac-style';
+      s.textContent = CSS;
+      (d.head || d.documentElement).appendChild(s);
+    }
+    if (!d.getElementById('finance-drag') && d.body) {
+      var g = d.createElement('div');
+      g.id = 'finance-drag';
+      g.setAttribute('data-tauri-drag-region', '');
+      d.body.appendChild(g);
+    }
+  }
+  pasang();
+  document.addEventListener('DOMContentLoaded', pasang);
+})();
+"##;
+
+/// Klik elemen di halaman panel. Dipakai menu: panel tetap jadi satu-satunya
+/// tempat logika tab, bulan, sensor, dan tema — menu hanya memencet tombolnya.
+fn klik(sel: &str) -> String {
+    format!("document.querySelector('{sel}')?.click()")
+}
+
+fn buat_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let tentang = PredefinedMenuItem::about(app, Some("Finance"), None)?;
+    let menu_app = SubmenuBuilder::new(app, "Finance")
+        .item(&tentang)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let navigasi = SubmenuBuilder::new(app, "Navigasi")
+        .item(&MenuItemBuilder::with_id("tab:home", "Beranda").accelerator("CmdOrCtrl+1").build(app)?)
+        .item(&MenuItemBuilder::with_id("tab:catat", "Catat").accelerator("CmdOrCtrl+2").build(app)?)
+        .item(&MenuItemBuilder::with_id("tab:daftar", "Daftar").accelerator("CmdOrCtrl+3").build(app)?)
+        .item(&MenuItemBuilder::with_id("tab:akun", "Akun").accelerator("CmdOrCtrl+4").build(app)?)
+        .item(&MenuItemBuilder::with_id("tab:analisa", "Analisa").accelerator("CmdOrCtrl+5").build(app)?)
+        .item(&MenuItemBuilder::with_id("tab:hutang", "Hutang").accelerator("CmdOrCtrl+6").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("bulan:prev", "Bulan Sebelumnya").accelerator("CmdOrCtrl+[").build(app)?)
+        .item(&MenuItemBuilder::with_id("bulan:next", "Bulan Berikutnya").accelerator("CmdOrCtrl+]").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("sensor", "Sembunyikan Nominal").accelerator("CmdOrCtrl+Shift+H").build(app)?)
+        .item(&MenuItemBuilder::with_id("tema", "Ganti Tema").accelerator("CmdOrCtrl+Shift+T").build(app)?)
+        .build()?;
+    let tampilan = SubmenuBuilder::new(app, "Tampilan")
+        .item(&MenuItemBuilder::with_id("muat-ulang", "Muat Ulang").accelerator("CmdOrCtrl+R").build(app)?)
+        .separator()
+        .fullscreen()
+        .build()?;
+    let jendela = SubmenuBuilder::new(app, "Jendela")
+        .minimize()
+        .separator()
+        .close_window()
+        .build()?;
+    Menu::with_items(app, &[&menu_app, &edit, &navigasi, &tampilan, &jendela])
+}
+
+fn tangani_menu(app: &AppHandle, event: MenuEvent) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let js = match event.id().as_ref() {
+        "tab:home" => klik(".navtab[data-tab=home]"),
+        "tab:catat" => klik(".navtab[data-tab=catat]"),
+        "tab:daftar" => klik(".navtab[data-tab=daftar]"),
+        "tab:akun" => klik(".navtab[data-tab=akun]"),
+        "tab:analisa" => klik(".navtab[data-tab=analisa]"),
+        "tab:hutang" => klik(".navtab[data-tab=hutang]"),
+        "bulan:prev" => klik("#btn-prev-month"),
+        "bulan:next" => klik("#btn-next-month"),
+        "sensor" => klik("#btn-sensor"),
+        "tema" => klik("#btn-tema"),
+        "muat-ulang" => "location.reload()".to_string(),
+        _ => return,
+    };
+    let _ = win.eval(&js);
+}
 
 const SIAP_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
@@ -373,13 +479,20 @@ pub fn run() {
                 WebviewUrl::External("about:blank".parse()?),
             )
             .title("Finance")
+            .title_bar_style(TitleBarStyle::Overlay)
+            .hidden_title(true)
             .inner_size(1100.0, 760.0)
+            .min_inner_size(390.0, 640.0)
+            .center()
             .visible(false)
+            .initialization_script(MAC_INIT)
             .build()?;
+            app.set_menu(buat_menu(app.handle())?)?;
             let slot = slot_setup.clone();
             thread::spawn(move || nyalakan(win, slot));
             Ok(())
         })
+        .on_menu_event(tangani_menu)
         .on_window_event(|window, event| {
             // Satu jendela = satu server (§7): menutup jendela = keluar dari app.
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
