@@ -37,6 +37,35 @@
   --color-transfer: #475467;
   --color-transfer-bg: #f2f4f7;
 
+  /* ── Skala warna baru (11 Nov 2026) ─────────────────────────────────────
+     Biru diganti indigo, abu-abu diberi sedikit rona ungu supaya terasa
+     satu keluarga. Karena Tailwind membaca skala ini lewat @theme, semua
+     utility `bg-blue-600`, `text-gray-700`, dst. ikut berubah, termasuk
+     yang ditulis di app.js. Urutan kecerahan tetap sama, jadi pasangan
+     terang/gelap yang sudah ada tetap benar. */
+  --color-blue-50: #eef2ff;
+  --color-blue-100: #e0e7ff;
+  --color-blue-200: #c7d2fe;
+  --color-blue-300: #a5b4fc;
+  --color-blue-400: #818cf8;
+  --color-blue-500: #6366f1;
+  --color-blue-600: #4f46e5;
+  --color-blue-700: #4338ca;
+  --color-blue-800: #3730a3;
+  --color-blue-900: #312e81;
+
+  --color-gray-50: #f7f7fc;
+  --color-gray-100: #eeeef6;
+  --color-gray-200: #e1e1ec;
+  --color-gray-300: #c8c9da;
+  --color-gray-400: #9d9fb9;
+  --color-gray-500: #6f7291;
+  --color-gray-600: #535774;
+  --color-gray-700: #3e4160;
+  --color-gray-800: #272a45;
+  --color-gray-900: #1a1c33;
+  --color-gray-950: #0d0e1f;
+
   /* Target sentuh minimum 44px (UI-MOBILE.md). Dipakai lewat `min-h-tap`. */
   --spacing-tap: 44px;
 }
@@ -60,24 +89,52 @@
 @layer base {
   html { -webkit-text-size-adjust: 100%; }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply text-gray-900 antialiased;
     font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
                  "Helvetica Neue", Arial, sans-serif;
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Latar: gradasi mesh lembut (indigo, merah muda, teal) di atas dasar
+       lavender muda. Terang dan gelap punya nilai sendiri di bawah. */
+    background-color: #eef0fb;
+    background-image:
+      radial-gradient(60vmax 60vmax at -10% -10%, rgba(99,102,241,.22), transparent 60%),
+      radial-gradient(50vmax 50vmax at 110% 10%, rgba(236,72,153,.16), transparent 60%),
+      radial-gradient(60vmax 60vmax at 50% 120%, rgba(20,184,166,.16), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100vh;
   }
   /* Gelap ditulis lewat class, sama seperti komponen — bukan media query.
      Ini membuat pilihan manual Deny menang walaupun macOS-nya mode terang. */
-  .gelap body { @apply bg-gray-950 text-gray-100; }
+  .gelap body {
+    color: #e6e7f5;
+    background-color: #0a0b1a;
+    background-image:
+      radial-gradient(60vmax 60vmax at -10% -10%, rgba(99,102,241,.28), transparent 60%),
+      radial-gradient(50vmax 50vmax at 110% 10%, rgba(236,72,153,.14), transparent 60%),
+      radial-gradient(60vmax 60vmax at 50% 120%, rgba(20,184,166,.12), transparent 60%);
+  }
   :focus-visible { @apply outline-2 outline-offset-2 outline-blue-600; }
 }
 
 @layer components {
   /* ── Kartu & permukaan ─────────────────────────────────────────────── */
+  /* Kartu kaca: latar putih semi-transparan + blur, sudut besar, bayangan
+     berwarna indigo yang sangat tipis. Di gelap: permukaan abu-ungu gelap
+     dengan garis tepi putih 8%. */
   .kartu {
-    @apply rounded-xl border border-gray-200 bg-white p-5
-           dark:border-gray-800 dark:bg-gray-900;
+    @apply rounded-3xl border border-white/80 bg-white/70 p-5 backdrop-blur-xl
+           shadow-[0_18px_40px_-18px_rgba(79,70,229,.25)]
+           dark:border-white/10 dark:bg-gray-900/70 dark:shadow-[0_18px_40px_-18px_rgba(0,0,0,.6)];
   }
   .kartu-rapat { @apply p-0 overflow-hidden; }
+
+  /* Bento: kartu total kekayaan memakai gradasi aksen lembut. */
+  #hero-card {
+    background-image: linear-gradient(135deg, rgba(99,102,241,.16), rgba(236,72,153,.08) 60%, transparent);
+  }
+  .gelap #hero-card {
+    background-image: linear-gradient(135deg, rgba(99,102,241,.30), rgba(236,72,153,.10) 60%, transparent);
+  }
 
   /* ── Angka ─────────────────────────────────────────────────────────── */
   .angka { @apply tabular-nums; }
@@ -104,7 +161,11 @@
            transition-[transform,background-color,opacity] duration-150
            active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100;
   }
-  .tombol-utama { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  /* Tombol utama: gradasi indigo → ungu dengan cahaya lembut di bawahnya. */
+  .tombol-utama {
+    @apply text-white shadow-[0_10px_24px_-10px_rgba(79,70,229,.7)] hover:brightness-110;
+    background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  }
   .tombol-hantu {
     @apply bg-white text-gray-900 border-gray-300 hover:bg-gray-50
            dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 dark:hover:bg-gray-800;
@@ -153,13 +214,23 @@
      dan bisa digeser ke samping. Judul "finance" sudah disembunyikan di
      ≤560px, tapi itu saja tidak cukup — pemilih bulan yang paling lebar. */
   .navbulan { @apply flex shrink-0 items-center gap-1; }
+  /* Mobile: tab penuh di baris 1 (ikon + label), baris 2 = pemilih bulan di
+     tengah dan tombol sensor/tema di kanan. Sebelumnya membungkus jadi tiga
+     baris dan memakan ±190px tinggi layar. */
   @media (width < 640px) {
-    #appbar nav {
-      flex-wrap: wrap;
-      row-gap: 2px;
+    /* Tab berbagi lebar layar secara merata, jadi tidak ada ruang kosong
+       dan target sentuhnya tetap ≥44px. */
+    #appbar .navtab {
+      flex: 1 1 0;
+    }
+    #appbar nav > div:has(#btn-sensor) {
+      grid-column: 2;
+      grid-row: 2;
     }
     .navbulan {
-      @apply order-last w-full justify-center;
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: center;
     }
   }
 
@@ -247,15 +318,52 @@
                               border-2; }
 
   /* ── Navigasi atas ─────────────────────────────────────────────────── */
+  /* Tab: pil. Yang aktif diisi gradasi indigo, bukan garis bawah. */
   .navtab {
     @apply flex flex-col items-center justify-center gap-0.5 min-w-tap min-h-tap
-           px-2.5 py-1 rounded-lg text-[11px] font-semibold leading-none
+           px-3 py-1 rounded-full text-[11px] font-semibold leading-none
            bg-transparent border-0 cursor-pointer whitespace-nowrap
            text-gray-500 dark:text-gray-400
-           hover:bg-gray-100 dark:hover:bg-gray-800
-           aria-current:text-blue-600 aria-current:bg-blue-50
-           dark:aria-current:bg-gray-800;
+           transition-colors duration-150
+           hover:text-gray-900 dark:hover:text-gray-100;
   }
+  .navtab {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    transition: color .25s ease, transform .15s ease, background-color .2s ease;
+  }
+  .navtab:hover { background-color: rgba(255,255,255,.55); }
+  .gelap .navtab:hover { background-color: rgba(255,255,255,.06); }
+  .navtab:active { transform: scale(.93); }
+  .navtab[aria-current="page"] { color: #fff; }
+
+  /* Pil aktif: satu elemen yang meluncur antar tab (lihat skrip di body). */
+  .nav-pill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    opacity: 0;
+    border-radius: 9999px;
+    z-index: 0;
+    pointer-events: none;
+    background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    box-shadow: 0 8px 18px -8px rgba(79,70,229,.8);
+    transition: transform .4s cubic-bezier(.2,.8,.2,1), width .4s cubic-bezier(.2,.8,.2,1), opacity .2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-pill, .navtab { transition: none; }
+  }
+
+  /* Kapsul bulan + tombol sensor/tema: satu kelompok, bukan tombol lepas. */
+  .navbulan {
+    padding: 2px;
+    border-radius: 9999px;
+    background-color: rgba(255,255,255,.5);
+  }
+  .gelap .navbulan { background-color: rgba(255,255,255,.05); }
 
   /* ── Baris transaksi ─────────────────────────────────────────────────
      Padding horizontal diambil dari barisnya sendiri, dan kartunya TANPA
@@ -562,4 +670,120 @@
     scroll-behavior: auto !important;
   }
   .spinner, .tombol-bekerja::after { animation-duration: 2s !important; }
+}
+
+/* ── Layar Catat: kaca, gelembung, dan kapsul komposer (11 Nov 2026) ─────
+   Blok ini sengaja di belakang: nilainya menimpa @apply di atas untuk
+   properti warna, bayangan, dan sudut saja. Tidak ada yang mengubah struktur. */
+@layer components {
+  .gelembung-user {
+    background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    color: #fff;
+    border-radius: 20px 20px 6px 20px;
+    box-shadow: 0 10px 22px -12px rgba(79,70,229,.75);
+  }
+  .gelembung-bot {
+    background-color: rgba(255,255,255,.78);
+    border: 1px solid rgba(255,255,255,.85);
+    border-radius: 20px 20px 20px 6px;
+    box-shadow: 0 8px 24px -16px rgba(79,70,229,.35);
+    backdrop-filter: blur(12px);
+  }
+  .gelap .gelembung-bot {
+    background-color: rgba(17,18,38,.72);
+    border-color: rgba(255,255,255,.10);
+    box-shadow: none;
+  }
+
+  .draft {
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,.85);
+    background-color: rgba(255,255,255,.78);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 18px 40px -20px rgba(79,70,229,.35);
+  }
+  .gelap .draft {
+    background-color: rgba(17,18,38,.74);
+    border-color: rgba(255,255,255,.10);
+    box-shadow: none;
+  }
+
+  /* Contoh kalimat: pil kaca, bisa diketuk, terasa saat ditekan. */
+  .saran {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 9999px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #3e4160;
+    background-color: rgba(255,255,255,.72);
+    border: 1px solid rgba(255,255,255,.95);
+    box-shadow: 0 4px 12px -8px rgba(79,70,229,.45);
+    cursor: pointer;
+    transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
+  }
+  .saran:hover {
+    transform: translateY(-1px);
+    background-color: #fff;
+    box-shadow: 0 8px 18px -10px rgba(79,70,229,.5);
+  }
+  .saran:active { transform: scale(.96); }
+  .gelap .saran {
+    color: #e6e7f5;
+    background-color: rgba(255,255,255,.06);
+    border-color: rgba(255,255,255,.10);
+    box-shadow: none;
+  }
+  .gelap .saran:hover { background-color: rgba(255,255,255,.12); }
+
+  /* Komposer: kapsul kaca yang mengambang di bawah layar. */
+  .composer {
+    border-radius: 28px;
+    background-color: rgba(255,255,255,.86);
+    border: 1px solid rgba(255,255,255,.95);
+    box-shadow: 0 16px 40px -18px rgba(79,70,229,.4);
+    backdrop-filter: blur(16px);
+  }
+  .gelap .composer {
+    background-color: rgba(17,18,38,.86);
+    border-color: rgba(255,255,255,.10);
+    box-shadow: none;
+  }
+  .composer-input {
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: inherit;
+  }
+  .composer-input::placeholder { color: #9d9fb9; }
+  .gelap .composer-input::placeholder { color: #6f7291; }
+
+  #btn-send { transition: opacity .2s ease, transform .15s ease; }
+  #btn-send[data-isi="0"] { opacity: .45; }
+}
+
+/* Layar Catat: footer didorong ke bawah layar, di bawah kotak tulis, bukan
+   menempel tepat di bawah hint seperti saat isinya pendek. Hanya aktif saat
+   #view-catat tampil; layar lain tidak berubah. */
+@layer base {
+  body:has(#view-catat:not([hidden])) {
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(#view-catat:not([hidden])) > main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+  }
+  body:has(#view-catat:not([hidden])) > main > section {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(#view-catat:not([hidden])) > footer {
+    margin-top: auto;
+  }
 }

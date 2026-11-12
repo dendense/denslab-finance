@@ -42,38 +42,43 @@
      Catatan: UI-MOBILE.md meminta aksi utama di separuh bawah supaya
      terjangkau ibu jari — navbar atas adalah kebalikannya. -->
 <header id="appbar"
-        class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur
-               dark:border-gray-800 dark:bg-gray-900/95"
+        class="sticky top-2 z-40 mx-2 rounded-3xl border border-white/80 bg-white/75 shadow-[0_12px_32px_-16px_rgba(79,70,229,.35)] backdrop-blur-xl
+               sm:mx-4
+               dark:border-white/10 dark:bg-gray-900/75 dark:shadow-[0_12px_32px_-16px_rgba(0,0,0,.7)]"
         style="padding-top: env(safe-area-inset-top, 0px)">
-  <nav class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5"
+  <nav class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5
+              max-[640px]:grid max-[640px]:grid-cols-[1fr_auto] max-[640px]:gap-x-2 max-[640px]:gap-y-0"
        aria-label="Navigasi utama">
-    <h1 class="shrink-0 text-base font-bold tracking-tight max-[640px]:hidden">finance</h1>
+    <h1 class="shrink-0 text-base font-bold tracking-tight max-[1100px]:hidden">finance</h1>
 
-    <div class="mx-auto flex items-stretch gap-0.5 max-[640px]:flex-1 max-[640px]:justify-center"
+    <div class="relative mx-auto flex shrink-0 items-stretch gap-0.5 max-[640px]:col-span-2 max-[640px]:mx-0 max-[640px]:w-full max-[640px]:justify-between"
          role="tablist">
+      <!-- Indikator pil yang meluncur. Posisinya diatur skrip di bawah
+           body, dari atribut aria-current yang ditulis app.js. -->
+      <span id="nav-pill" class="nav-pill" aria-hidden="true"></span>
       <button class="navtab" type="button" data-tab="home" aria-current="page" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">◧</span>
-        <span class="max-[640px]:hidden">Beranda</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Beranda</span>
       </button>
       <button class="navtab" type="button" data-tab="catat" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">＋</span>
-        <span class="max-[640px]:hidden">Catat</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Catat</span>
       </button>
       <button class="navtab" type="button" data-tab="daftar" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">≡</span>
-        <span class="max-[640px]:hidden">Daftar</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Daftar</span>
       </button>
       <button class="navtab" type="button" data-tab="akun" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">◈</span>
-        <span class="max-[640px]:hidden">Akun</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Akun</span>
       </button>
       <button class="navtab" type="button" data-tab="analisa" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">◔</span>
-        <span class="max-[640px]:hidden">Analisa</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Analisa</span>
       </button>
       <button class="navtab" type="button" data-tab="hutang" role="tab">
         <span class="text-[17px] leading-none" aria-hidden="true">▤</span>
-        <span class="max-[640px]:hidden">Hutang</span>
+        <span class="hidden max-[640px]:inline min-[1100px]:inline">Hutang</span>
       </button>
     </div>
 
@@ -145,20 +150,20 @@
     <!-- Kolom kiri (analisa) + kolom kanan (transaksi) saat jendela lebar. -->
     <div class="flex flex-col gap-4 py-4 lg:flex-row lg:items-start lg:gap-6">
 
-      <div class="flex min-w-0 flex-1 flex-col gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-4 lg:grid lg:grid-cols-6 lg:gap-4">
 
         <!-- 1. Total kekayaan — angka paling besar, pertama dicari -->
-        <div class="kartu">
+        <div class="kartu lg:col-span-3" id="hero-card">
           <p class="eyebrow">Total kekayaan</p>
-          <p class="angka-besar mt-1" id="hero-value">—</p>
+          <p class="angka-besar mt-1 whitespace-nowrap lg:text-[44px] 2xl:text-[52px]" id="hero-value">—</p>
           <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-gray-200 pt-3
                       text-[13px] text-gray-500 dark:border-gray-800 dark:text-gray-400"
                id="hero-breakdown" hidden></div>
         </div>
 
         <!-- 2. Pemasukan & pengeluaran bulan berjalan -->
-        <div class="grid grid-cols-2 gap-3">
-          <div class="kartu">
+        <div class="grid grid-cols-2 gap-3 lg:contents">
+          <div class="kartu lg:col-span-3">
             <p class="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500
                       dark:text-gray-400">
               <span class="inline-block h-2 w-2 rounded-full bg-(--color-income)"></span>
@@ -168,7 +173,7 @@
             <p class="mt-1 text-xs leading-snug text-gray-500 dark:text-gray-400"
                id="stat-in-sub"></p>
           </div>
-          <div class="kartu">
+          <div class="kartu lg:col-span-3">
             <p class="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500
                       dark:text-gray-400">
               <span class="inline-block h-2 w-2 rounded-full bg-(--color-expense)"></span>
@@ -181,7 +186,7 @@
         </div>
 
         <!-- 3. Selisih -->
-        <div class="kartu flex flex-wrap items-baseline justify-between gap-3"
+        <div class="kartu lg:col-span-3 flex flex-wrap items-baseline justify-between gap-3"
              id="delta-card">
           <div>
             <p class="text-[13px] font-semibold text-gray-500 dark:text-gray-400">
@@ -193,7 +198,7 @@
         </div>
 
         <!-- 4. Tidak ada data bulan ini: kalimat, bukan angka 0 -->
-        <div class="rounded-xl border border-dashed border-gray-300 px-5 py-6 text-center
+        <div class="rounded-xl lg:col-span-6 border border-dashed border-gray-300 px-5 py-6 text-center
                     dark:border-gray-700" id="home-empty" hidden>
           <p class="text-base font-semibold">Belum ada data bulan ini</p>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" id="home-empty-body"></p>
@@ -205,13 +210,13 @@
 
              Placeholder muncul kalau bulan lalu belum ada datanya ATAU belum
              selesai — bukan angka nol (permintaan Deny). -->
-        <div id="lalu-blok" class="kartu">
+        <div id="lalu-blok" class="kartu lg:col-span-2">
           <p class="eyebrow">Sisa bulan lalu</p>
           <div id="lalu-host"></div>
         </div>
 
         <!-- 5. Grafik tren 6 bulan -->
-        <div class="kartu" id="chart-card">
+        <div class="kartu lg:col-span-4" id="chart-card">
           <p class="eyebrow">Tren 6 bulan</p>
           <p class="mt-1 mb-3 text-xs leading-snug text-gray-500 dark:text-gray-400"
              id="chart-note"></p>
@@ -229,7 +234,7 @@
              menyaring flow_type='expense' — talangan & pelunasan utang tidak
              ikut, karena itu bukan konsumsi (CONTRACT.md §2).
              Isinya diisi renderKategori(). -->
-        <div class="kartu" id="kategori-card">
+        <div class="kartu lg:col-span-6" id="kategori-card">
           <p class="eyebrow">Konsumsi per kategori</p>
           <p class="mt-1 mb-3 text-xs leading-snug text-gray-500 dark:text-gray-400"
              id="kategori-note"></p>
@@ -270,20 +275,34 @@
            renderStatusAI() di app.js. -->
       <div id="ai-host" class="pt-4"></div>
 
+      <!-- Layar kosong: sapaan + contoh kalimat. Disembunyikan skrip di bawah
+           begitu chatlog berisi, dan tampil lagi kalau chatlog kosong. -->
+      <div id="catat-intro" class="catat-intro pt-6 pb-2">
+        <p class="eyebrow" id="intro-tanggal">Hari ini</p>
+        <h3 class="mt-1 text-[26px] font-bold leading-tight tracking-tight">Mau catat apa?</h3>
+        <p class="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+          Tulis seperti ngobrol. Ketuk contoh untuk mengisi kotak tulis.
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2" role="group" aria-label="Contoh kalimat">
+          <button type="button" class="saran" data-isi="makan siang 25000 ">🍜 Makan siang</button>
+          <button type="button" class="saran" data-isi="beli kopi 30000 ">☕ Kopi</button>
+          <button type="button" class="saran" data-isi="bensin 200000 ">⛽ Bensin</button>
+          <button type="button" class="saran" data-isi="gaji masuk 4000000 ">💼 Gaji</button>
+          <button type="button" class="saran" data-isi="pindah 500000 ke tabungan ">🏦 Pindah ke tabungan</button>
+        </div>
+      </div>
+
       <div class="flex flex-col gap-4 py-4" id="chatlog"
            aria-live="polite" aria-relevant="additions"></div>
 
-      <div class="sticky bottom-0 border-t border-gray-200 bg-gray-50 py-3
-                  dark:border-gray-800 dark:bg-gray-950">
-        <form class="flex items-end gap-2" id="composer-form">
+      <div class="sticky bottom-0 pt-2 pb-3">
+        <form class="composer flex items-end gap-2 p-2" id="composer-form">
           <label class="sr-only" for="chat-input">Kalimat transaksi</label>
           <textarea id="chat-input" rows="1" enterkeyhint="send"
             placeholder="cth: makan malam 45000 sama parkir 5rb"
             autocomplete="off" autocapitalize="sentences"
-            class="min-h-tap max-h-33 flex-1 resize-none rounded-lg border
-                   border-gray-300 bg-white px-3 py-3 text-base
-                   dark:border-gray-700 dark:bg-gray-900"></textarea>
-          <button class="tombol tombol-utama w-11 shrink-0 px-0" id="btn-send"
+            class="composer-input min-h-tap max-h-33 flex-1 resize-none px-3 py-3 text-base"></textarea>
+          <button class="tombol tombol-utama h-11 w-11 shrink-0 rounded-full px-0" id="btn-send" data-isi="0"
                   type="submit" aria-label="Uraikan">
             <span id="btn-send-icon">↑</span>
           </button>
@@ -417,5 +436,80 @@
 </footer>
 
 <script src="/app.js"></script>
+<script>
+/* Navigasi atas: pil yang meluncur ke tab aktif + navigasi panah.
+   Tidak mengubah logika tab: app.js tetap yang menulis aria-current.
+   Skrip ini hanya membaca atribut itu dan menggerakkan pil. */
+(function () {
+  var list = document.querySelector('#appbar [role="tablist"]');
+  var pill = document.getElementById('nav-pill');
+  if (!list || !pill) return;
+  function aktif() { return list.querySelector('.navtab[aria-current="page"]'); }
+  function pindahkan(btn) {
+    if (!btn) return;
+    pill.style.width = btn.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+    pill.style.opacity = '1';
+  }
+  new MutationObserver(function () { pindahkan(aktif()); })
+    .observe(list, { attributes: true, subtree: true, attributeFilter: ['aria-current'] });
+  window.addEventListener('resize', function () { pindahkan(aktif()); });
+  list.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    var tabs = [].slice.call(list.querySelectorAll('.navtab'));
+    var i = tabs.indexOf(document.activeElement);
+    if (i < 0) i = tabs.indexOf(aktif());
+    var next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+    next.focus();
+    next.click();
+    e.preventDefault();
+  });
+  pindahkan(aktif());
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { pindahkan(aktif()); });
+  }
+})();
+</script>
+<script>
+/* Layar Catat: sapaan & contoh kalimat, dan keadaan tombol kirim.
+   Tidak memanggil API dan tidak mengubah alur draft — hanya mengisi kotak
+   tulis lewat event `input` biasa, sehingga app.js ikut bereaksi seperti
+   saat Deny mengetik sendiri. */
+(function () {
+  var ta = document.getElementById('chat-input');
+  var btn = document.getElementById('btn-send');
+  var log = document.getElementById('chatlog');
+  var intro = document.getElementById('catat-intro');
+  var tgl = document.getElementById('intro-tanggal');
+  if (tgl) {
+    try {
+      tgl.textContent = new Date().toLocaleDateString('id-ID',
+        { weekday: 'long', day: 'numeric', month: 'long' });
+    } catch (e) { /* biarkan "Hari ini" */ }
+  }
+  /* Contoh kalimat tetap terlihat sampai Deny mengirim pesan pertama.
+     Sapaan bot yang muncul otomatis TIDAK dihitung sebagai percakapan. */
+  function sembunyikanSapaan() {
+    if (intro && log) intro.hidden = !!log.querySelector('.gelembung-user');
+  }
+  if (log) new MutationObserver(sembunyikanSapaan).observe(log, { childList: true });
+  sembunyikanSapaan();
+  function keadaanKirim() {
+    if (btn) btn.dataset.isi = ta && ta.value.trim() ? '1' : '0';
+  }
+  if (ta) ta.addEventListener('input', keadaanKirim);
+  document.querySelectorAll('.saran').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!ta) return;
+      ta.value = b.dataset.isi || '';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      keadaanKirim();
+    });
+  });
+  keadaanKirim();
+})();
+</script>
 </body>
 </html>
