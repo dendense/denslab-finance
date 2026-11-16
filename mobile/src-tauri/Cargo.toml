@@ -1,0 +1,20 @@
+[package]
+name = "finance-mobile"
+version = "0.1.0"
+description = "Finance (Android)"
+edition = "2021"
+rust-version = "1.90"
+
+# Aplikasi Android: TIDAK ada sidecar Python (beda dengan app/ desktop).
+# Isinya hanya WebView yang memuat web/ (dibundel oleh scripts/build-android.sh)
+# dan berbicara ke backend Google Apps Script lewat HTTPS.
+[lib]
+name = "finance_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"

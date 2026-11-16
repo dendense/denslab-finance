@@ -45,8 +45,10 @@ import model_config  # noqa: E402
 STATIC = ROOT_DIR / "web"
 
 # Berkas yang boleh dibuka TANPA login. Selain ini, semua butuh sesi sah.
-# Sengaja sesempit mungkin: hanya halaman login dan gaya/ikonnya.
-PUBLIK = {"/login", "/login.html", "/masuk"}
+# Sengaja sesempit mungkin: halaman login, plus dua skrip kecil yang dimuat
+# halaman login (mode backend + jembatan Apps Script). Keduanya tanpa data
+# dan tanpa rahasia — lihat web/config.js dan web/backend.js.
+PUBLIK = {"/login", "/login.html", "/masuk", "/config.js", "/backend.js"}
 
 
 def _cookie_sesi(token):

@@ -97,10 +97,25 @@ python3 scripts/uji_model.py <nama-model>
 Nama model lewat kenari.id tidak memakai awalan `kenari/`; awalan itu konvensi router lain
 dan menghasilkan HTTP 400 `no price for model`.
 
+## Aplikasi Android (data di Google Sheet)
+
+Panel yang sama bisa jadi aplikasi Android yang menyimpan data di Google Sheet
+lewat backend Google Apps Script (`gas/`), dengan tampilan khusus Android
+(bar bawah, FAB Catat, tombol Back). Pemasangan, migrasi data, dan build APK:
+[`docs/ANDROID-GSHEET.md`](docs/ANDROID-GSHEET.md).
+
 ## Test
 
 ```bash
 for t in tests/test_*.py; do python3 "$t"; done
+```
+
+Backend Apps Script dibandingkan langsung dengan server Python (lihat
+`docs/ANDROID-GSHEET.md` §Uji):
+
+```bash
+python3 tests/gas/golden.py <salinan-folder-data> /tmp/golden.json
+GOLDEN=/tmp/golden.json node --test tests/gas/*.test.js
 ```
 
 20 berkas uji, semuanya skrip biasa (tanpa pytest). Uji yang menyentuh database memakai

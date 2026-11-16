@@ -1,0 +1,9 @@
+# Semua hasil build — dibangun ulang oleh scripts/build-android.sh
+dist/
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/
+*.keystore
+*.jks
+keystore.properties

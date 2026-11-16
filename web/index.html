@@ -13,6 +13,12 @@
      memakai emoji sebagai ikon (🐴 di judul, ◧ ＋ ≡ ◈ ◔ di navbar). -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐴</text></svg>">
 
+<!-- config.js + backend.js: mode backend & tampilan. Di aplikasi Android
+     keduanya mengalihkan fetch('/api/...') ke Apps Script dan memasang
+     tampilan Android; di Mac tidak mengubah apa pun. WAJIB sebelum app.js. -->
+<script src="/config.js"></script>
+<script src="/backend.js"></script>
+
 <!-- WAJIB paling atas, SEBELUM <link> stylesheet. Kalau ditaruh sesudahnya,
      CSS sudah diterapkan lebih dulu dan mode gelap berkedip putih sesaat.
      Baca tema tersimpan sebelum halaman digambar.
@@ -436,6 +442,8 @@
 </footer>
 
 <script src="/app.js"></script>
+<!-- Bingkai Android (bar bawah, FAB, Back). Langsung berhenti di versi web. -->
+<script src="/android.js"></script>
 <script>
 /* Navigasi atas: pil yang meluncur ke tab aktif + navigasi panah.
    Tidak mengubah logika tab: app.js tetap yang menulis aria-current.

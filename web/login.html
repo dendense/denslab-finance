@@ -9,6 +9,10 @@
      (server hanya melayani .html/.css/.js). Halaman ini dipakai justru saat
      Deny baru membuka panel, jadi 404 di log paling sering datang dari sini. -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐴</text></svg>">
+<!-- Mode backend + jembatan Apps Script. Publik di server.py (PUBLIK): tanpa
+     data, tanpa rahasia. Di Mac keduanya tidak mengubah perilaku halaman ini. -->
+<script src="/config.js"></script>
+<script src="/backend.js"></script>
 <!--
   Halaman login BERDIRI SENDIRI — tanpa Tailwind, tanpa app.js.
 
@@ -83,7 +87,9 @@
   }
   label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
   .bidang-sandi { position: relative; margin-bottom: 16px; }
-  input[type="password"], input[type="text"] {
+  #baris-alamat { margin-bottom: 16px; }
+  #alamat { padding-right: 12px; font-size: 14px; }
+  input[type="password"], input[type="text"], input[type="url"] {
     width: 100%;
     min-height: 44px;
     padding: 10px 52px 10px 12px;   /* kanan lega untuk tombol mata */
@@ -181,6 +187,15 @@
     <p class="pesan" id="pesan" role="alert"></p>
 
     <form id="form" novalidate>
+      <!-- Hanya di aplikasi Android (FIN.mode 'gas'): alamat Web App Apps
+           Script. Disimpan di perangkat; disembunyikan lagi setelah terisi. -->
+      <div id="baris-alamat" hidden>
+        <label for="alamat">Alamat server (URL Web App Apps Script)</label>
+        <input type="url" id="alamat" name="alamat" inputmode="url" autocomplete="off"
+               autocapitalize="off" spellcheck="false"
+               placeholder="https://script.google.com/macros/s/…/exec">
+      </div>
+
       <label for="pw" id="label-pw">Password</label>
       <div class="bidang-sandi">
         <input type="password" id="pw" name="pw" autocomplete="current-password"
@@ -209,6 +224,9 @@
     <p class="petunjuk" id="petunjuk">
       Sesi bertahan walau app ditutup — berakhir saat laptop di-restart atau setelah 30 hari.
     </p>
+    <p class="petunjuk" id="ganti-alamat-baris" hidden>
+      <a href="#" id="ganti-alamat">Ganti alamat server</a>
+    </p>
   </div>
 </main>
 
@@ -225,6 +243,11 @@
   var sub = document.getElementById('sub');
   var labelPw = document.getElementById('label-pw');
   var petunjuk = document.getElementById('petunjuk');
+
+  var barisAlamat = document.getElementById('baris-alamat');
+  var alamat = document.getElementById('alamat');
+  var FIN = window.FIN || { mode: 'lokal', halamanPanel: '/' };
+  var GAS = FIN.mode === 'gas';
 
   var mode = null;      /* 'pasang' | 'masuk' */
   var minPw = 6;        /* ditimpa dari GET /api/auth (panjang_min_password) */
@@ -274,7 +297,26 @@
       sebab = sessionStorage.getItem('sesi_mati');
       if (sebab) sessionStorage.removeItem('sesi_mati');
     } catch (e) { /* mode privat: tidak apa-apa */ }
-    if (sebab) tampilkanPesan('Sesi berakhir — masuk lagi untuk melanjutkan.');
+    /* Pembukaan pertama aplikasi Android (belum ada alamat) bukan sesi yang
+       berakhir — jangan menakut-nakuti dengan pesan itu. */
+    if (sebab && !(GAS && !FIN.alamat())) tampilkanPesan('Sesi berakhir — masuk lagi untuk melanjutkan.');
+
+    /* Aplikasi Android: backend = Web App Apps Script. Alamatnya disimpan di
+       perangkat; kalau belum ada, minta dulu — tanpa alamat tidak ada server
+       yang bisa ditanya status login-nya. */
+    if (GAS) {
+      petunjuk.textContent = 'Data tersimpan di Google Sheet milikmu. Sesi bertahan '
+        + 'walau aplikasi ditutup — berakhir saat kamu keluar atau setelah 30 hari.';
+      if (!FIN.alamat()) {
+        barisAlamat.hidden = false;
+        alamat.required = true;
+        mode = 'masuk';
+        sub.textContent = 'Masukkan alamat server dan password.';
+        alamat.focus();
+        return;
+      }
+      document.getElementById('ganti-alamat-baris').hidden = false;
+    }
 
     try {
       var r = await fetch('/api/auth', { cache: 'no-store' });
@@ -284,7 +326,15 @@
          halaman ini ikut sendiri — tidak ada dua sumber untuk satu aturan
          yang bisa saling bertentangan tanpa ketahuan. */
       if (d && typeof d.panjang_min_password === 'number') minPw = d.panjang_min_password;
-      if (d.sudah_ada_password) {
+      if (GAS && !d.sudah_ada_password) {
+        /* Di internet, "pemasang pertama menang" berarti siapa pun yang
+           menemukan alamatnya bisa mengunci Deny keluar. Password dipasang
+           dari Mac lewat skrip migrasi (butuh ADMIN_TOKEN), bukan di sini. */
+        mode = 'masuk';
+        sub.textContent = 'Password belum dipasang di server.';
+        tampilkanPesan('Pasang dulu dari Mac: python3 scripts/migrasi_ke_gsheet.py '
+          + '--url <alamat> --token <ADMIN_TOKEN> --password');
+      } else if (d.sudah_ada_password) {
         mode = 'masuk';
         sub.textContent = 'Masukkan password untuk membuka panel.';
         labelPw.textContent = 'Password';
@@ -313,6 +363,14 @@
 
     var a = pw.value;
     var b = pw2.value;
+
+    if (GAS && !barisAlamat.hidden) {
+      if (!FIN.pasangAlamat(alamat.value)) {
+        tampilkanPesan('Alamat harus URL Web App: https://script.google.com/macros/s/…/exec');
+        alamat.focus();
+        return;
+      }
+    }
 
     if (!a) {
       tampilkanPesan('Password tidak boleh kosong.');
@@ -352,7 +410,7 @@
       if (d && d.masuk) {
         tampilkanPesan(mode === 'pasang' ? 'Password dipasang. Membuka panel…'
                                          : 'Berhasil masuk. Membuka panel…', 'benar');
-        location.replace('/');
+        location.replace(FIN.halamanPanel);
         return;
       }
 
@@ -370,11 +428,20 @@
       var n = pw.value.length;
       try { pw.setSelectionRange(n, n); } catch (e) { /* type=text tidak selalu mendukung */ }
     } catch (e) {
-      tampilkanPesan('Server tidak menjawab. Pastikan servernya masih jalan.');
+      tampilkanPesan(GAS ? 'Server tidak menjawab. Periksa koneksi internet dan alamat server.'
+                         : 'Server tidak menjawab. Pastikan servernya masih jalan.');
     } finally {
       tombol.disabled = false;
       tombol.textContent = mode === 'pasang' ? 'Pasang password & masuk' : 'Masuk';
     }
+  });
+
+  document.getElementById('ganti-alamat').addEventListener('click', function (ev) {
+    ev.preventDefault();
+    barisAlamat.hidden = false;
+    alamat.required = true;
+    alamat.value = FIN.alamat() || '';
+    alamat.focus();
   });
 
   muatStatus();

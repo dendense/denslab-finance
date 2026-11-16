@@ -79,3 +79,7 @@ desktop.ini
 *~
 .idea/
 .vscode/
+
+# clasp (Apps Script): id skrip pribadi
+.clasp.json
+.clasprc.json
