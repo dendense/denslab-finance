@@ -70,6 +70,22 @@ deployments → edit → Version: *New version* (URL tetap sama).
 
 ## Build APK
 
+### Tanpa memasang apa pun: GitHub Actions
+
+Workflow `.github/workflows/android-apk.yml` membangun APK di cloud (runner
+GitHub sudah punya Android SDK, NDK, dan Rust). Buka tab **Actions → APK
+Android → Run workflow**, tunggu ±15–25 menit, lalu unduh
+`finance-android-apk` dari bagian **Artifacts** di halaman run-nya. Workflow
+juga jalan otomatis saat ada push yang mengubah `web/`, `mobile/`, atau skrip
+build. Hasilnya APK debug arm64 — bisa langsung dipasang di HP.
+
+### Di Mac
+
+Butuh ruang disk ±7–9 GB (arm64 saja, tanpa emulator). Rinciannya: Android
+Studio ±2,5–3 GB, SDK dasar ±1–1,5 GB, NDK ±2,5–3,5 GB, Rust + target ±1,5 GB,
+cache Gradle + hasil kompilasi ±1–3 GB. Lewati emulator di wizard Android
+Studio (uji di HP sungguhan) untuk menghemat 2–4 GB lagi.
+
 Prasyarat di Mac:
 
 - Android Studio (SDK + **NDK** dari SDK Manager → SDK Tools)
@@ -89,7 +105,10 @@ bash scripts/build-android.sh
 ```
 
 Skrip menyalin `web/` ke `mobile/dist/` dengan `config.js` mode Android
-(`web/` sendiri tidak diubah), lalu menjalankan `tauri android build`. APK
+(`web/` sendiri tidak diubah), lalu menjalankan `tauri android build` untuk
+**arm64 saja** (hampir semua HP sekarang; `--semua-arsitektur` untuk
+armv7/x86/x86_64). Setelah APK jadi, `mobile/src-tauri/target` boleh dihapus
+untuk mengembalikan ruang disk. APK
 debug bisa langsung dipasang (`adb install …apk` atau kirim ke HP). Untuk APK
 rilis bertanda tangan: `--rilis` setelah menyiapkan keystore sesuai
 [panduan signing Tauri](https://v2.tauri.app/distribute/sign/android/).

@@ -1,0 +1,71 @@
+# Bangun APK Android di cloud — tanpa memasang Android Studio di Mac.
+#
+# Jalankan: tab Actions → "APK Android" → Run workflow. Juga jalan otomatis
+# saat ada push yang menyentuh UI/aplikasi. APK debug (arm64) diunduh dari
+# bagian "Artifacts" di halaman run-nya.
+#
+# Runner ubuntu-latest sudah punya Android SDK + NDK (ANDROID_HOME,
+# ANDROID_NDK_LATEST_HOME) dan rustup; tinggal JDK 17, Node, dan pnpm.
+# Langkah build-nya SAMA dengan di Mac: scripts/build-android.sh.
+name: APK Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      semua_arsitektur:
+        description: "Bangun juga armv7/x86/x86_64 (lebih lama)"
+        type: boolean
+        default: false
+  push:
+    paths:
+      - "web/**"
+      - "mobile/**"
+      - "scripts/build-android.sh"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri
+
+      - name: Build APK
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          if [ "${{ inputs.semua_arsitektur }}" = "true" ]; then
+            bash scripts/build-android.sh --semua-arsitektur
+          else
+            bash scripts/build-android.sh
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finance-android-apk
+          path: mobile/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
