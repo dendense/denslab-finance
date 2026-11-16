@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Izin minimum: jendela utama saja. Tidak ada akses berkas/shell — data hanya lewat HTTPS ke Apps Script.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

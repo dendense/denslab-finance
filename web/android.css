@@ -1,0 +1,265 @@
+/* Tampilan Android (Material 3) — hanya berlaku di bawah html.ui-android.
+ *
+ * Berkas ini TIDAK berlapis (@layer), sedangkan tailwind.css seluruhnya
+ * berlapis: aturan tak berlapis selalu menang, jadi tidak perlu !important
+ * untuk menimpa gaya web — kecuali melawan utilitas Tailwind yang ditulis
+ * langsung di atribut class.
+ *
+ * Yang sengaja beda dari versi web:
+ *   - Permukaan tonal DATAR, bukan kaca blur. backdrop-filter mahal di GPU
+ *     HP kelas menengah dan membuat gulir patah-patah.
+ *   - Warna dari palet tonal Material 3 dengan seed indigo yang sama (#4f46e5).
+ *   - Tinggi bar & target sentuh mengikuti Material: app bar 64dp,
+ *     navigation bar 80dp, FAB 56dp, target minimum 48dp.
+ *   - Inset sistem (status bar, gesture bar) dihormati: Android 15 memaksa
+ *     edge-to-edge, jadi tanpa ini bar bawah tertutup garis gesture.
+ */
+html.ui-android {
+  --and-surface: #fbf8ff;
+  --and-surface-low: #f5f2fd;
+  --and-surface-container: #efedf8;
+  --and-surface-high: #e9e7f2;
+  --and-on-surface: #1b1b21;
+  --and-on-surface-variant: #47464f;
+  --and-outline-variant: #c8c5d0;
+  --and-primary: #4f46e5;
+  --and-on-primary: #ffffff;
+  --and-primary-container: #e2dfff;
+  --and-on-primary-container: #0f0069;
+  --and-secondary-container: #e2e0f9;
+  --and-on-secondary-container: #191a2c;
+  --and-inset-top: env(safe-area-inset-top, 0px);
+  --and-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --and-bar-h: 64px;
+  --and-nav-h: 80px;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+html.ui-android.gelap {
+  --and-surface: #131318;
+  --and-surface-low: #1b1b21;
+  --and-surface-container: #1f1f25;
+  --and-surface-high: #2a292f;
+  --and-on-surface: #e4e1e9;
+  --and-on-surface-variant: #c8c5d0;
+  --and-outline-variant: #47464f;
+  --and-primary: #c3c0ff;
+  --and-on-primary: #2a1c99;
+  --and-primary-container: #4239c6;
+  --and-on-primary-container: #e2dfff;
+  --and-secondary-container: #46455c;
+  --and-on-secondary-container: #e2e0f9;
+}
+
+html.ui-android [hidden] { display: none !important; }
+
+html.ui-android body {
+  background: var(--and-surface) !important;
+  color: var(--and-on-surface);
+  font-family: Roboto, "Google Sans", system-ui, sans-serif;
+  padding-top: calc(var(--and-bar-h) + var(--and-inset-top));
+  padding-bottom: calc(var(--and-nav-h) + var(--and-inset-bottom) + 88px);
+  min-height: 100dvh;
+}
+/* Ruang untuk baris pemilih bulan di bawah judul. */
+html.ui-android[data-and-tab="home"] body,
+html.ui-android[data-and-tab="daftar"] body {
+  padding-top: calc(var(--and-bar-h) + 48px + var(--and-inset-top));
+}
+
+/* Bingkai web disembunyikan; isinya sudah dipindah ke bingkai Android. */
+html.ui-android #appbar,
+html.ui-android body > footer { display: none !important; }
+html.ui-android main { padding-bottom: 0; }
+
+/* ── Kartu: permukaan tonal datar ─────────────────────────────────────── */
+html.ui-android .kartu,
+html.ui-android .draft,
+html.ui-android .gelembung-bot,
+html.ui-android .composer {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: var(--and-surface-container) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html.ui-android .kartu { border-radius: 20px; }
+html.ui-android #hero-card {
+  background-color: var(--and-primary-container) !important;
+  background-image: none !important;
+  color: var(--and-on-primary-container);
+}
+html.ui-android .saran {
+  backdrop-filter: none;
+  background-color: var(--and-surface-low);
+  border: 1px solid var(--and-outline-variant);
+  box-shadow: none;
+  border-radius: 8px;
+  min-height: 40px;
+  color: var(--and-on-surface-variant);
+}
+
+/* Tombol: filled / outlined Material — pil 40dp, tanpa gradasi. */
+html.ui-android .tombol-utama {
+  background: var(--and-primary) !important;
+  background-image: none !important;
+  color: var(--and-on-primary) !important;
+  border-radius: 9999px !important;
+  box-shadow: none !important;
+  min-height: 48px;
+}
+html.ui-android .tombol-hantu {
+  background: transparent !important;
+  border: 1px solid var(--and-outline-variant) !important;
+  color: var(--and-primary) !important;
+  border-radius: 9999px !important;
+  min-height: 48px;
+}
+
+/* Tidak ada hover di layar sentuh: matikan efek angkat, beri umpan balik tekan. */
+@media (hover: none) {
+  html.ui-android .saran:hover { transform: none; background-color: var(--and-surface-low); }
+}
+html.ui-android button:active:not(:disabled),
+html.ui-android .chip:active { filter: brightness(.92); }
+
+/* ── Top app bar ──────────────────────────────────────────────────────── */
+html.ui-android .and-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  padding-top: var(--and-inset-top);
+  background: var(--and-surface);
+  transition: background-color .2s ease, box-shadow .2s ease;
+}
+html.ui-android .and-bar.terangkat {
+  background: var(--and-surface-container);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+html.ui-android .and-bar-baris {
+  height: var(--and-bar-h);
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 4px 0 16px;
+}
+html.ui-android .and-kembali { margin-left: -12px; }
+html.ui-android .and-judul {
+  flex: 1; margin: 0;
+  font-size: 22px; font-weight: 500; letter-spacing: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html.ui-android .and-aksi { display: flex; align-items: center; }
+html.ui-android .and-aksi button,
+html.ui-android .and-ikon-tombol {
+  width: 48px; height: 48px; border-radius: 9999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--and-on-surface-variant);
+}
+html.ui-android .and-bulan {
+  height: 48px; padding: 0 8px 4px !important;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: transparent !important; border-radius: 0 !important;
+}
+html.ui-android .and-bulan #month-label {
+  min-width: 140px; font-size: 14px; font-weight: 500;
+  color: var(--and-on-surface);
+  padding: 6px 16px; border-radius: 8px;
+  border: 1px solid var(--and-outline-variant);
+}
+html.ui-android .and-bulan button { width: 48px; height: 48px; border-radius: 9999px; }
+
+/* ── Navigation bar bawah ─────────────────────────────────────────────── */
+html.ui-android .and-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  height: calc(var(--and-nav-h) + var(--and-inset-bottom));
+  padding-bottom: var(--and-inset-bottom);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--and-surface-container);
+  transition: transform .2s ease;
+}
+html.ui-android .and-nav-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; min-height: 48px; padding: 12px 0 16px;
+  background: none; border: 0; color: var(--and-on-surface-variant);
+  font: inherit; cursor: pointer;
+}
+html.ui-android .and-nav-indikator {
+  width: 64px; height: 32px; border-radius: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background-color .2s ease;
+}
+html.ui-android .and-nav-label { font-size: 12px; font-weight: 500; line-height: 16px; }
+html.ui-android .and-nav-item[aria-current="page"] { color: var(--and-on-surface); }
+html.ui-android .and-nav-item[aria-current="page"] .and-nav-label { font-weight: 700; }
+html.ui-android .and-nav-item[aria-current="page"] .and-nav-indikator {
+  background: var(--and-secondary-container);
+  color: var(--and-on-secondary-container);
+}
+
+html.ui-android .and-ikon {
+  width: 24px; height: 24px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ── FAB (extended) ───────────────────────────────────────────────────── */
+html.ui-android .and-fab {
+  position: fixed; z-index: 51;
+  right: 16px; bottom: calc(var(--and-nav-h) + var(--and-inset-bottom) + 16px);
+  height: 56px; padding: 0 20px 0 16px; border-radius: 16px; border: 0;
+  display: inline-flex; align-items: center; gap: 12px;
+  background: var(--and-primary-container); color: var(--and-on-primary-container);
+  font: inherit; font-size: 15px; font-weight: 600;
+  box-shadow: 0 3px 6px rgba(0,0,0,.16), 0 2px 4px rgba(0,0,0,.12);
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+/* ── Layar Catat: layar penuh, tanpa bar bawah & FAB ─────────────────── */
+html.ui-android[data-and-tab="catat"] .and-nav,
+html.ui-android[data-and-tab="catat"] .and-fab { display: none; }
+html.ui-android[data-and-tab="catat"] body { padding-bottom: var(--and-inset-bottom); }
+html.ui-android #view-catat .sticky.bottom-0 {
+  bottom: 0;
+  padding-bottom: calc(12px + var(--and-inset-bottom));
+  background: linear-gradient(to top, var(--and-surface) 70%, transparent);
+}
+html.ui-android .composer { border-radius: 28px; }
+
+/* ── Keyboard terbuka: bar bawah & FAB menyingkir ─────────────────────── */
+html.ui-android.keyboard-buka .and-nav { transform: translateY(110%); }
+html.ui-android.keyboard-buka .and-fab { opacity: 0; pointer-events: none; }
+
+/* ── Snackbar: di atas bar bawah, bukan di tengah layar ──────────────── */
+html.ui-android .toast {
+  top: auto !important;
+  bottom: calc(var(--and-nav-h) + var(--and-inset-bottom) + 88px);
+  border-radius: 4px; background: #313036; color: #f3eff7;
+}
+html.ui-android[data-and-tab="catat"] .toast { bottom: calc(96px + var(--and-inset-bottom)); }
+
+/* ── Setelan tema di layar Akun ───────────────────────────────────────── */
+html.ui-android .and-setelan {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 8px 12px 20px;
+}
+html.ui-android .and-setelan-judul { margin: 0; font-size: 16px; font-weight: 500; }
+html.ui-android .and-setelan-sub { margin: 2px 0 0; font-size: 13px; color: var(--and-on-surface-variant); }
+html.ui-android .and-setelan button { width: 48px; height: 48px; border-radius: 9999px; }
+
+/* ── Tarik untuk menyegarkan ──────────────────────────────────────────── */
+html.ui-android .and-tarik {
+  position: fixed; z-index: 49; left: 50%;
+  top: calc(var(--and-bar-h) + var(--and-inset-top) + 8px);
+  width: 40px; height: 40px; margin-top: -40px; border-radius: 9999px;
+  background: var(--and-surface-high); opacity: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transform: translate(-50%, 0);
+  pointer-events: none;
+}
+html.ui-android .and-tarik::after {
+  content: ''; position: absolute; inset: 10px; border-radius: 9999px;
+  border: 3px solid var(--and-primary); border-top-color: transparent;
+}
+html.ui-android .and-tarik.berputar { transform: translate(-50%, 56px); opacity: 1; }
+html.ui-android .and-tarik.berputar::after { animation: and-putar .8s linear infinite; }
+@keyframes and-putar { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  html.ui-android .and-nav, html.ui-android .and-fab, html.ui-android .and-bar { transition: none; }
+}

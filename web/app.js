@@ -410,7 +410,7 @@ function keLogin(reason) {
   if (SEDANG_KE_LOGIN) return;
   SEDANG_KE_LOGIN = true;
   try { sessionStorage.setItem('sesi_mati', reason || 'sesi berakhir'); } catch (e) { /* mode privat */ }
-  window.location.replace('/login');
+  window.location.replace(window.FIN ? FIN.halamanLogin : '/login');
 }
 
 /* Bungkus fetch: kembalikan Response seperti biasa, TAPI kalau statusnya 401
@@ -1304,7 +1304,8 @@ function formHapusTransaksi(li, t) {
 
   li.appendChild(el('p', 'm-0 text-xs leading-snug text-gray-500 dark:text-gray-400',
     'Transaksinya dihapus dari daftar dan dari semua angka. Salinannya disimpan '
-    + 'di terhapus.log, tapi mengembalikannya tidak bisa lewat panel ini.'));
+    + (window.FIN && FIN.mode === 'gas' ? "di tab 'terhapus' Google Sheet" : 'di terhapus.log')
+    + ', tapi mengembalikannya tidak bisa lewat panel ini.'));
 
   const pesan = el('p', 'm-0 text-xs text-(--color-expense)');
   pesan.hidden = true;
@@ -3052,6 +3053,10 @@ function openManual() {
         occurred_on: item.occurred_on, direction: item.direction,
         flow_type: item.flow_type, amount: item.amount,
         note: item.note || null, category: item.category || null,
+        /* Akun yang dipilih di chip WAJIB ikut. Tanpa ini server menolak
+           ("akun tidak disebutkan") begitu ada lebih dari satu akun aktif —
+           jalur cadangan saat AI mati jadi ikut mati. */
+        account_hint: item.account_hint || null,
       }],
     });
     if (!res.ok) {
@@ -4516,7 +4521,7 @@ async function keluar() {
        dari sudut Deny — dibanding menahan dia di panel yang sudah dia
        minta kunci. */
   }
-  window.location.replace('/login');
+  window.location.replace(window.FIN ? FIN.halamanLogin : '/login');
 }
 
 /* ══ Ikat ════════════════════════════════════════════════════════════════ */
