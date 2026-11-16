@@ -86,6 +86,42 @@ test('StoreMemori: backend Apps Script = server Python', { skip: lewati }, () =>
   putarUlang(g, ctx, () => { const s = new ctx.StoreMemori(data); s.seq = seq; return s; });
 });
 
+test('Rombongan: kasus dikirim berkelompok (tulis lalu baca) tetap = server Python', { skip: lewati }, () => {
+  const g = JSON.parse(fs.readFileSync(BERKAS, 'utf8'));
+  const ctx = siapkanCtx(g);
+  ctx.PropertiesService = propertiesPalsu();
+  const ss = new SpreadsheetPalsu();
+  ctx.ST = new ctx.StoreSheet(ss);
+  ctx.api_admin_impor({ data: g.ekspor.data, seq: g.ekspor.seq });
+  ctx.pasang_password('rahasia-uji');
+  const token = ctx.tangani({ method: 'POST', path: '/api/auth', body: { password: 'rahasia-uji' } }).body.token;
+
+  // Kelompok 7 kasus berturut-turut per rombongan; satu StoreSheet per
+  // rombongan (seperti satu doPost). Tulis di depan harus terlihat oleh baca
+  // di belakangnya dalam rombongan yang sama.
+  const beda = [];
+  for (let i = 0; i < g.kasus.length; i += 7) {
+    const kelompok = g.kasus.slice(i, i + 7);
+    ctx.ST = new ctx.StoreSheet(ss);
+    const r = ctx.tanganiRombongan({ token, batch: kelompok.map((k) => ({
+      method: k.method, path: k.path, query: k.query, body: k.body })) });
+    kelompok.forEach((k, j) => {
+      const h = r.batch[j];
+      try {
+        assert.strictEqual(h.status, k.status, 'status');
+        assert.deepStrictEqual(normal(JSON.parse(JSON.stringify(h.body))), normal(k.hasil));
+      } catch (e) {
+        beda.push('#' + (i + j) + ' ' + k.method + ' ' + k.path + '\n' + e.message.split('\n').slice(0, 20).join('\n'));
+      }
+    });
+  }
+  if (beda.length) assert.fail(beda.length + ' kasus berbeda dalam rombongan:\n\n' + beda.slice(0, 4).join('\n\n'));
+  // Batas ukuran rombongan dihormati.
+  ctx.ST = new ctx.StoreSheet(ss);
+  const besar = ctx.tanganiRombongan({ token, batch: Array(40).fill({ method: 'GET', path: '/api/categories' }) });
+  assert.strictEqual(besar.batch.length, ctx.BATAS_ROMBONGAN);
+});
+
 test('StoreSheet (tiruan Sheets): impor + semua kasus = server Python', { skip: lewati }, () => {
   const g = JSON.parse(fs.readFileSync(BERKAS, 'utf8'));
   const ctx = siapkanCtx(g);

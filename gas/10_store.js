@@ -148,6 +148,8 @@ function StoreSheet(ss) {
 StoreSheet.prototype = Object.create(StoreDasar.prototype);
 
 StoreSheet.prototype._sheet = function (tabel) {
+  this._sheetCache = this._sheetCache || {};
+  if (this._sheetCache[tabel]) return this._sheetCache[tabel];
   var sh = this.ss.getSheetByName(tabel);
   if (!sh) {
     sh = this.ss.insertSheet(tabel);
@@ -155,11 +157,20 @@ StoreSheet.prototype._sheet = function (tabel) {
     sh.getRange(1, 1, 1, nama.length).setValues([nama]).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
+  this._sheetCache[tabel] = sh;
   return sh;
 };
 
-/** Peta nama kolom -> indeks (0-based) dari header yang ADA di Sheet. */
+/** Peta nama kolom -> indeks (0-based) dari header yang ADA di Sheet.
+ *  Disimpan per permintaan: membacanya ulang di setiap baca/tulis menambah
+ *  satu panggilan Sheets (±100 ms) tiap kali. */
 StoreSheet.prototype._header = function (tabel) {
+  this._headerCache = this._headerCache || {};
+  if (!this._headerCache[tabel]) this._headerCache[tabel] = this._headerBaca(tabel);
+  return this._headerCache[tabel];
+};
+
+StoreSheet.prototype._headerBaca = function (tabel) {
   var sh = this._sheet(tabel);
   var lebar = Math.max(sh.getLastColumn(), 1);
   var h = sh.getRange(1, 1, 1, lebar).getValues()[0].map(String);

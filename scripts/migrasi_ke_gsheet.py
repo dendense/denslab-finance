@@ -137,8 +137,14 @@ def main():
         print("Ditulis ke %s: %s" % (a.ekspor, {k: len(v) for k, v in hasil["data"].items()}))
         return 0
 
-    if not a.url or not a.token:
-        ap.error("--url dan --token wajib (kecuali --ekspor)")
+    if not a.url:
+        ap.error("--url wajib (kecuali --ekspor)")
+    if not a.token:
+        # Ditanya tersembunyi: token di argumen perintah tersimpan di riwayat
+        # shell dan terlihat di `ps` selama skrip jalan.
+        a.token = getpass.getpass("ADMIN_TOKEN (dari log siapkan()): ").strip()
+        if not a.token:
+            ap.error("ADMIN_TOKEN kosong")
 
     if not a.password:
         hasil = ekspor(_data_dir(a.data))

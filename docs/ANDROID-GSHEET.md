@@ -59,7 +59,7 @@ asli dan ke backend Apps Script harus menghasilkan balasan yang identik.
 5. **Pindahkan data dari Mac** (membaca `finance.db` dengan `mode=ro`, tidak
    mengubah apa pun di Mac) dan pasang password:
    ```bash
-   python3 scripts/migrasi_ke_gsheet.py --url <URL_EXEC> --token <ADMIN_TOKEN>
+   python3 scripts/migrasi_ke_gsheet.py --url <URL_EXEC>   # ADMIN_TOKEN ditanya tersembunyi
    ```
    Ganti password kapan saja: tambahkan `--password`. Skrip menolak impor
    kalau tab `transactions` sudah berisi (supaya transaksi dari HP tidak

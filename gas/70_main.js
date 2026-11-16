@@ -27,7 +27,32 @@ function doPost(e) {
   try { amplop = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
   catch (err) { return _json({ status: 400, body: { ok: false, error: 'json_rusak', message: 'Body bukan JSON valid.' } }); }
   ST = new StoreSheet(bukaSpreadsheet());
-  return _json(tangani(amplop));
+  return _json(amplop.batch ? tanganiRombongan(amplop) : tangani(amplop));
+}
+
+/**
+ * Rombongan: beberapa amplop dalam SATU panggilan Web App.
+ *
+ * Kenapa: setiap panggilan Apps Script dikenai biaya tetap ±1–2 detik
+ * (terukur 16 Nov 2026), dan refresh() panel mengambil 9–10 data berurutan
+ * — 15–20 detik setelah tiap edit. Dalam rombongan, biaya tetap dibayar
+ * sekali dan tiap tab Sheet dibaca sekali (ST dipakai bersama).
+ *
+ * Amplop dijalankan BERURUTAN dengan ST yang sama: tulis di depan (mis.
+ * PATCH transaksi) sudah terlihat oleh baca di belakangnya, sama seperti
+ * kalau dikirim satu per satu.
+ */
+var BATAS_ROMBONGAN = 25;
+
+function tanganiRombongan(r) {
+  var daftar = Array.isArray(r.batch) ? r.batch.slice(0, BATAS_ROMBONGAN) : [];
+  return { status: 200, batch: daftar.map(function (a) {
+    if (a && !a.token) a.token = r.token;
+    try { return tangani(a || {}); }
+    catch (e) {
+      return { status: 200, body: { ok: false, error: 'gagal_server', message: String(e && e.message) } };
+    }
+  }) };
 }
 
 function _json(o) {

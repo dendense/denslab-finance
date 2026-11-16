@@ -52,7 +52,12 @@ function siapkan() {
   if (lembar1 && ss.getSheets().length > 1 && lembar1.getLastRow() === 0) ss.deleteSheet(lembar1);
   console.log('Siap. Kategori bawaan ditambahkan: ' + n);
   console.log('ADMIN_TOKEN (simpan, dipakai skrip migrasi): ' + token);
-  console.log('Belum ada KENARI_API_KEY? Isi di Project Settings > Script Properties.');
+  // Periksa sungguhan, jangan cuma mengingatkan: pesan yang selalu muncul
+  // terbaca seperti "kuncinya hilang" padahal sudah diisi.
+  console.log(props.getProperty('KENARI_API_KEY')
+    ? 'KENARI_API_KEY: sudah diisi — catat pintar & narasi analisa siap.'
+    : 'KENARI_API_KEY: BELUM diisi. Isi di Project Settings > Script Properties; ' +
+      'tanpa itu catat pintar jatuh ke isian manual.');
   return token;
 }
 

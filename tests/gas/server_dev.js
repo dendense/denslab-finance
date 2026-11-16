@@ -3,6 +3,7 @@
  * dan menjalankan backend gas/ (tangani) di POST /exec, di atas tiruan Sheet.
  *
  *   node tests/gas/server_dev.js <ekspor.json> [port]
+ *   JEDA_MS=1500 node tests/gas/server_dev.js ...   # tiru lambatnya Apps Script
  *
  * <ekspor.json> = keluaran `scripts/migrasi_ke_gsheet.py --ekspor` dari
  * SALINAN data. Password uji: "rahasia-uji". Alamat server di halaman login:
@@ -26,6 +27,9 @@ ctx.ST = new ctx.StoreSheet(ss);
 ctx.api_admin_impor({ data: ekspor.data, seq: ekspor.seq });
 ctx.pasang_password('rahasia-uji');
 
+const JEDA = Number(process.env.JEDA_MS || 0);
+const HITUNG = { panggilan: 0 };   // GET /hitung -> jumlah panggilan /exec (untuk uji)
+
 const JENIS = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' };
 
 http.createServer((req, res) => {
@@ -35,12 +39,22 @@ http.createServer((req, res) => {
     req.on('end', () => {
       ctx.ST = new ctx.StoreSheet(ss);
       let out;
-      try { out = ctx.tangani(JSON.parse(isi || '{}')); }
-      catch (e) { out = { status: 500, body: { ok: false, error: 'gagal_server', message: String(e) } }; }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(out));
+      try {
+        const a = JSON.parse(isi || '{}');
+        out = a.batch ? ctx.tanganiRombongan(a) : ctx.tangani(a);
+      } catch (e) { out = { status: 500, body: { ok: false, error: 'gagal_server', message: String(e) } }; }
+      HITUNG.panggilan += 1;
+      // JEDA meniru biaya tetap Apps Script (±1–2 dtk per panggilan).
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(out));
+      }, JEDA);
     });
     return;
+  }
+  if (req.url === '/hitung') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(HITUNG));
   }
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p === '/') p = '/index.html';
